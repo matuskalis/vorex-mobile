@@ -10,6 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiClient } from '../lib/api-client';
+import { useGamification } from '../context/GamificationContext';
+import { XPBar } from '../components/XPBar';
+import { StreakBadge } from '../components/StreakBadge';
+import { AchievementToast } from '../components/AchievementToast';
 
 interface Unit {
   unit_id: string;
@@ -32,6 +36,8 @@ export function LearnScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bonusSummary, setBonusSummary] = useState<any>(null);
+  const { state: gamificationState, clearPendingAchievements } = useGamification();
+  const [currentToastIndex, setCurrentToastIndex] = useState(0);
 
   const fetchData = async () => {
     try {
@@ -69,6 +75,15 @@ export function LearnScreen({ navigation }: any) {
     }
   };
 
+  const handleDismissAchievement = () => {
+    if (currentToastIndex < gamificationState.pendingAchievements.length - 1) {
+      setCurrentToastIndex(currentToastIndex + 1);
+    } else {
+      clearPendingAchievements();
+      setCurrentToastIndex(0);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -81,6 +96,15 @@ export function LearnScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Achievement Toast */}
+      {gamificationState.pendingAchievements.length > 0 && (
+        <AchievementToast
+          achievement={gamificationState.pendingAchievements[currentToastIndex]}
+          onDismiss={handleDismissAchievement}
+          visible={true}
+        />
+      )}
+
       <ScrollView
         style={styles.scrollView}
         refreshControl={
@@ -97,6 +121,22 @@ export function LearnScreen({ navigation }: any) {
               </Text>
             </View>
           )}
+        </View>
+
+        {/* XP Bar */}
+        <View style={styles.gamificationSection}>
+          <XPBar showXPNumbers={true} />
+        </View>
+
+        {/* Streak Badge */}
+        <View style={styles.gamificationSection}>
+          <StreakBadge
+            showDetails={true}
+            onPress={() => {
+              // Could navigate to achievements screen
+              console.log('Streak badge pressed');
+            }}
+          />
         </View>
 
         {/* Login Bonus Card */}
@@ -207,6 +247,10 @@ const styles = StyleSheet.create({
   bonusCta: {
     color: '#666',
     marginTop: 8,
+  },
+  gamificationSection: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
   unitsContainer: {
     paddingHorizontal: 20,

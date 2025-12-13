@@ -102,21 +102,25 @@ export function ProfileScreen() {
           <View style={styles.weeklyCard}>
             <Text style={styles.sectionTitle}>This Week</Text>
             <View style={styles.weeklyBars}>
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
-                <View key={index} style={styles.dayColumn}>
-                  <View style={styles.barContainer}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: `${Math.min(100, (progress.weekly_progress[index] || 0) / 2)}%`,
-                        },
-                      ]}
-                    />
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => {
+                const progressValue = progress.weekly_progress[index] || 0;
+                const barHeight = Math.min(100, progressValue / 2) * 0.8; // Scale to max ~80px
+                return (
+                  <View key={index} style={styles.dayColumn}>
+                    <View style={styles.barContainer}>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: barHeight,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.dayLabel}>{day}</Text>
                   </View>
-                  <Text style={styles.dayLabel}>{day}</Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </View>
         )}

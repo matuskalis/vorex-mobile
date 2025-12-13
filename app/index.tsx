@@ -14,7 +14,7 @@ export default function HomeScreen() {
   }
 
   if (user) {
-    return <Redirect href="/(tabs)/learn" />;
+    return <Redirect href="/(tabs)" />;
   }
 
   return (

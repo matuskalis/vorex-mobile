@@ -1,69 +1,76 @@
-import { Slot } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { usePathname, router } from 'expo-router';
+import { Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
+import { Home, MessageCircle, BookOpen, BarChart3, User } from 'lucide-react-native';
+import { colors, layout } from '../../src/theme';
+
+const ICON_SIZE = 24;
 
 export default function TabLayout() {
-  const pathname = usePathname();
-
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <Slot />
-      </View>
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => router.push('/(tabs)/learn')}
-        >
-          <Text style={styles.tabIcon}>📚</Text>
-          <Text style={[styles.tabLabel, pathname.includes('learn') && styles.tabLabelActive]}>
-            Learn
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => router.push('/(tabs)/profile')}
-        >
-          <Text style={styles.tabIcon}>👤</Text>
-          <Text style={[styles.tabLabel, pathname.includes('profile') && styles.tabLabelActive]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: styles.tabBar,
+        tabBarActiveTintColor: colors.primary[500],
+        tabBarInactiveTintColor: colors.neutral[500],
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => <Home size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="conversation"
+        options={{
+          title: 'Practice',
+          tabBarIcon: ({ color }) => <MessageCircle size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="review"
+        options={{
+          title: 'Review',
+          tabBarIcon: ({ color }) => <BookOpen size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="progress"
+        options={{
+          title: 'Progress',
+          tabBarIcon: ({ color }) => <BarChart3 size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+    </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  content: {
-    flex: 1,
-  },
   tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#1a1a1a',
-    borderTopColor: '#333',
+    backgroundColor: colors.background.card,
+    borderTopColor: colors.border.default,
     borderTopWidth: 1,
     paddingBottom: 24,
-    paddingTop: 8,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  tabIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+    paddingTop: 10,
+    height: layout.tabBarHeight,
   },
   tabLabel: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
-  tabLabelActive: {
-    color: '#6366f1',
+  tabIcon: {
+    marginBottom: 2,
   },
 });
