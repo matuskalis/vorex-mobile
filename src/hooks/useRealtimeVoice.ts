@@ -25,6 +25,17 @@ interface LatencyMetrics {
   totalRoundTrip: number; // ms from audio send to first audio received
 }
 
+interface SessionConfig {
+  instructions?: string;  // System prompt / persona instructions
+  voice?: 'alloy' | 'echo' | 'shimmer' | 'ash' | 'ballad' | 'coral' | 'sage' | 'verse';
+  turn_detection?: {
+    type: 'server_vad' | 'none';
+    threshold?: number;
+    prefix_padding_ms?: number;
+    silence_duration_ms?: number;
+  };
+}
+
 interface UseRealtimeVoiceOptions {
   onMessage?: (message: Message) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
@@ -572,6 +583,48 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions = {}) {
     setIsSpeaking(false);
   }, []);
 
+  // Update session configuration (including persona/system prompt)
+  // IMPORTANT: Call this after connection to set up the AI's persona!
+  const sendSessionUpdate = useCallback((config: SessionConfig) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('[RealtimeVoice] Cannot update session - not connected');
+      return false;
+    }
+
+    const sessionUpdate: any = {
+      type: 'session.update',
+      session: {
+        modalities: ['text', 'audio'],
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: 'whisper-1',
+        },
+        turn_detection: config.turn_detection || {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500,
+        },
+      },
+    };
+
+    // Add instructions (persona/system prompt) if provided
+    if (config.instructions) {
+      sessionUpdate.session.instructions = config.instructions;
+      console.log('[RealtimeVoice] Setting persona:', config.instructions.substring(0, 100) + '...');
+    }
+
+    // Add voice if provided
+    if (config.voice) {
+      sessionUpdate.session.voice = config.voice;
+    }
+
+    wsRef.current.send(JSON.stringify(sessionUpdate));
+    console.log('[RealtimeVoice] Session update sent');
+    return true;
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -595,5 +648,6 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions = {}) {
     stopListening,
     sendMessage,
     interrupt,
+    sendSessionUpdate,  // For setting persona/system prompt
   };
 }

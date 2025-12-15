@@ -81,6 +81,7 @@ export default function RolePlayConversationScreen() {
     startListening,
     stopListening,
     interrupt,
+    sendSessionUpdate,
   } = useRealtimeVoice({
     onMessage: (message) => {
       memory.addMessage(message);
@@ -108,14 +109,20 @@ export default function RolePlayConversationScreen() {
 
   // Configure the session with persona
   const configureSessionWithPersona = useCallback(() => {
-    // Note: The useRealtimeVoice hook doesn't expose the WebSocket directly
-    // We would need to modify it to support custom system prompts
-    // For now, we'll log this - in production, you'd extend the hook
-    console.log('Session connected - persona:', scenario.persona.name);
-    console.log('System prompt:', scenario.systemPrompt);
+    console.log('Configuring session with persona:', scenario.persona.name);
 
-    // TODO: Extend useRealtimeVoice to accept system prompt configuration
-  }, [scenario]);
+    // Send session.update with the role-play persona system prompt
+    const success = sendSessionUpdate({
+      instructions: scenario.systemPrompt,
+      voice: 'alloy', // Use consistent voice for personas
+    });
+
+    if (success) {
+      console.log('Persona configured successfully');
+    } else {
+      console.warn('Failed to configure persona - WebSocket not ready');
+    }
+  }, [scenario, sendSessionUpdate]);
 
   // Auto-connect on mount
   useEffect(() => {

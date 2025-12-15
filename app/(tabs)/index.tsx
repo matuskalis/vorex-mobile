@@ -3,7 +3,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { useLearning } from '../../src/context/LearningContext';
 import { useVocabulary } from '../../src/context/VocabularyContext';
-import { Target, Play, Coffee, TrendingUp, Clock, ChevronRight, Zap, Mic2, Sun, BookOpen, Users, Brain } from 'lucide-react-native';
+import { useGamification } from '../../src/context/GamificationContext';
+import { XPBar } from '../../src/components/XPBar';
+import { StreakBadge } from '../../src/components/StreakBadge';
+import { Target, Play, Coffee, TrendingUp, Clock, ChevronRight, Zap, Mic2, Sun, BookOpen, Users, Brain, Trophy } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows } from '../../src/theme';
 
 const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1'] as const;
@@ -19,6 +22,7 @@ function formatDate() {
 export default function HomeScreen() {
   const { state } = useLearning();
   const { getDueTodayWords, getStats } = useVocabulary();
+  const { state: gamificationState } = useGamification();
 
   // If user hasn't completed placement test, show CTA
   if (!state.hasCompletedPlacement) {
@@ -70,6 +74,12 @@ export default function HomeScreen() {
             <Text style={styles.weeklyMinutes}>{state.weeklyStats.speakingMinutes}</Text>
             <Text style={styles.weeklyLabel}>min this week</Text>
           </View>
+        </View>
+
+        {/* Gamification - XP Bar and Streak */}
+        <View style={styles.gamificationSection}>
+          <XPBar showXPNumbers={true} />
+          <StreakBadge showDetails={true} />
         </View>
 
         {/* Warm-up Card - Show if available */}
@@ -304,6 +314,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: spacing[6],
+  },
+  gamificationSection: {
+    paddingHorizontal: layout.screenPadding,
+    marginBottom: spacing[4],
+    gap: spacing[3],
   },
   // Placement Test CTA
   placementContainer: {
