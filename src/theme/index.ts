@@ -1,5 +1,5 @@
 /**
- * SpeakSharp Design System
+ * Vorex Design System
  * Central export for all theme tokens
  */
 
@@ -14,6 +14,10 @@ export type { TextStyleName } from './typography';
 
 export { shadows } from './shadows';
 export type { ShadowName } from './shadows';
+
+// Theme variants
+export { darkTheme, lightTheme, defaultTheme, getTheme } from './themes';
+export type { ThemeType, ThemeName } from './themes';
 
 // Quick access to commonly used values
 export const theme = {

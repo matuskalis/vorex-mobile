@@ -1,303 +1,759 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useLearning } from '../../src/context/LearningContext';
 import { useVocabulary } from '../../src/context/VocabularyContext';
 import { useGamification } from '../../src/context/GamificationContext';
-import { XPBar } from '../../src/components/XPBar';
-import { StreakBadge } from '../../src/components/StreakBadge';
-import { Target, Play, Coffee, TrendingUp, Clock, ChevronRight, Zap, Mic2, Sun, BookOpen, Users, Brain, Trophy } from 'lucide-react-native';
-import { colors, spacing, layout, textStyles, shadows } from '../../src/theme';
+import { useRecommendations, useSRSDueCount } from '../../src/contexts';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop, G } from 'react-native-svg';
+import { Target, Play, TrendingUp, Clock, ChevronRight, Brain, Flame, Sparkles, Trophy, RefreshCw, GraduationCap, MessageSquare, BookOpen } from 'lucide-react-native';
+import { colors, spacing, layout, textStyles, shadows, darkTheme } from '../../src/theme';
+import { useEffect, useRef } from 'react';
+import { LessonRecommendation } from '../../src/lib/api-client';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1'] as const;
 
-function formatDate() {
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function formatDate(): string {
   return new Date().toLocaleDateString('en-US', {
     weekday: 'long',
-    month: 'long',
+    month: 'short',
     day: 'numeric',
   });
+}
+
+// Streak label based on milestone
+function getStreakLabel(streak: number): string {
+  if (streak >= 100) return 'Legendary!';
+  if (streak >= 60) return '2 months!';
+  if (streak >= 30) return '1 month!';
+  if (streak >= 14) return '2 weeks!';
+  if (streak >= 7) return '1 week!';
+  return 'day streak';
+}
+
+// Motivational messages based on user progress
+function getMotivationalMessage(streak: number, todayMinutes: number, goalMinutes: number): string {
+  const progress = goalMinutes > 0 ? todayMinutes / goalMinutes : 0;
+
+  if (progress >= 1) {
+    return "Goal complete! Practice more to level up faster.";
+  }
+  if (progress >= 0.5) {
+    return "Halfway there! Keep up the momentum.";
+  }
+  if (streak >= 7) {
+    return `${streak} days strong! Don't break the chain.`;
+  }
+  if (streak >= 3) {
+    return "You're building a great habit!";
+  }
+  if (todayMinutes > 0) {
+    return "Great start! A little more practice goes a long way.";
+  }
+  return "Ready to improve your English?";
+}
+
+// Circular Progress Ring Component
+function ProgressRing({
+  progress,
+  size = 120,
+  strokeWidth = 10,
+  gradientColors = [colors.primary[400], colors.primary[600]],
+  children
+}: {
+  progress: number;
+  size?: number;
+  strokeWidth?: number;
+  gradientColors?: string[];
+  children?: React.ReactNode;
+}) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (Math.min(progress, 1) * circumference);
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Defs>
+          <SvgGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={gradientColors[0]} />
+            <Stop offset="100%" stopColor={gradientColors[1]} />
+          </SvgGradient>
+        </Defs>
+        {/* Background circle */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={colors.neutral[700]}
+          strokeWidth={strokeWidth}
+          fill="none"
+          opacity={0.6}
+        />
+        {/* Progress circle */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="url(#progressGradient)"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
+// Unified Hero Ring - combines time, streak, and XP in one visual
+function UnifiedHeroRing({
+  timeProgress,
+  xpProgress,
+  todayMinutes,
+  goalMinutes,
+  streak,
+  level,
+  currentXP,
+  xpToNext,
+  goalComplete,
+}: {
+  timeProgress: number;
+  xpProgress: number;
+  todayMinutes: number;
+  goalMinutes: number;
+  streak: number;
+  level: number;
+  currentXP: number;
+  xpToNext: number;
+  goalComplete: boolean;
+}) {
+  const size = 200;
+  const outerStroke = 14;
+  const innerStroke = 8;
+
+  const outerRadius = (size - outerStroke) / 2;
+  const innerRadius = outerRadius - outerStroke - 8;
+
+  const outerCircumference = outerRadius * 2 * Math.PI;
+  const innerCircumference = innerRadius * 2 * Math.PI;
+
+  const outerOffset = outerCircumference - (Math.min(timeProgress, 1) * outerCircumference);
+  const innerOffset = innerCircumference - (Math.min(xpProgress, 1) * innerCircumference);
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (goalComplete) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.03, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [goalComplete]);
+
+  return (
+    <Animated.View style={[
+      styles.unifiedRingContainer,
+      { transform: [{ scale: pulseAnim }] }
+    ]}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <SvgGradient id="timeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={goalComplete ? colors.success[400] : colors.primary[400]} />
+            <Stop offset="100%" stopColor={goalComplete ? colors.success[500] : colors.accent[400]} />
+          </SvgGradient>
+          <SvgGradient id="xpGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={colors.accent[400]} />
+            <Stop offset="100%" stopColor={colors.accent[500]} />
+          </SvgGradient>
+        </Defs>
+
+        {/* Outer ring - Time progress (background) */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={outerRadius}
+          stroke={darkTheme.colors.border.default}
+          strokeWidth={outerStroke}
+          fill="none"
+        />
+        {/* Outer ring - Time progress (fill) */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={outerRadius}
+          stroke="url(#timeGradient)"
+          strokeWidth={outerStroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${outerCircumference} ${outerCircumference}`}
+          strokeDashoffset={outerOffset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+
+        {/* Inner ring - XP progress (background) */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={innerRadius}
+          stroke={darkTheme.colors.border.default}
+          strokeWidth={innerStroke}
+          fill="none"
+          opacity={0.5}
+        />
+        {/* Inner ring - XP progress (fill) */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={innerRadius}
+          stroke="url(#xpGradient)"
+          strokeWidth={innerStroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${innerCircumference} ${innerCircumference}`}
+          strokeDashoffset={innerOffset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+
+      {/* Center content */}
+      <View style={styles.unifiedRingCenter}>
+        {goalComplete ? (
+          <>
+            <View style={styles.goalCompleteIcon}>
+              <Trophy size={28} color={colors.success[400]} strokeWidth={2} />
+            </View>
+            <Text style={styles.unifiedRingLabel}>Goal Complete!</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.unifiedRingValue}>{todayMinutes}</Text>
+            <Text style={styles.unifiedRingLabel}>/ {goalMinutes} min</Text>
+          </>
+        )}
+      </View>
+
+      {/* Streak badge - positioned at top right */}
+      {streak > 0 && (
+        <View style={styles.streakBadgeFloat}>
+          <Flame size={14} color={colors.accent[400]} strokeWidth={2} fill={colors.accent[400]} />
+          <Text style={styles.streakBadgeFloatText}>{streak}</Text>
+        </View>
+      )}
+
+      {/* Level badge - positioned at bottom */}
+      <View style={styles.levelBadgeFloat}>
+        <Text style={styles.levelBadgeFloatText}>Lv.{level}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// Animated Streak Flame
+function StreakFlame({ streak, size = 24 }: { streak: number; size?: number }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (streak > 0) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scaleAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [streak]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Flame
+        size={size}
+        color={streak > 0 ? colors.accent[400] : colors.neutral[600]}
+        strokeWidth={2}
+        fill={streak > 0 ? colors.accent[400] : 'transparent'}
+      />
+    </Animated.View>
+  );
+}
+
+// Animated Play Button with pulse effect
+function AnimatedPlayButton({ goalComplete }: { goalComplete: boolean }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    // Subtle pulse animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Glow animation for goal complete state
+    if (goalComplete) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 0.6, duration: 800, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [goalComplete]);
+
+  return (
+    <Animated.View style={[
+      styles.playButtonOuter,
+      { transform: [{ scale: pulseAnim }] }
+    ]}>
+      {goalComplete && (
+        <Animated.View style={[styles.playButtonGlow, { opacity: glowAnim }]} />
+      )}
+      <View style={[
+        styles.playButton,
+        goalComplete && styles.playButtonComplete
+      ]}>
+        <Play
+          size={32}
+          color={goalComplete ? colors.success[600] : colors.primary[600]}
+          strokeWidth={2}
+          fill={goalComplete ? colors.success[600] : colors.primary[600]}
+        />
+      </View>
+    </Animated.View>
+  );
+}
+
+// Get icon for recommendation type
+function getRecommendationIcon(type: string) {
+  switch (type) {
+    case 'lesson': return GraduationCap;
+    case 'practice': return MessageSquare;
+    case 'review': return RefreshCw;
+    default: return BookOpen;
+  }
+}
+
+// Get color for difficulty
+function getDifficultyColor(difficulty: string) {
+  switch (difficulty) {
+    case 'easy': return colors.success[500];
+    case 'medium': return colors.accent[500];
+    case 'hard': return colors.error[500];
+    default: return colors.primary[500];
+  }
+}
+
+// Recommendation Card Component
+function RecommendationCard({
+  recommendation,
+  index,
+  onPress,
+}: {
+  recommendation: LessonRecommendation;
+  index: number;
+  onPress: () => void;
+}) {
+  const Icon = getRecommendationIcon(recommendation.type);
+  const difficultyColor = getDifficultyColor(recommendation.difficulty);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <Pressable
+        style={({ pressed }) => [styles.recommendationCard, pressed && styles.cardPressed]}
+        onPress={onPress}
+      >
+        <View style={[styles.recommendationIconContainer, { backgroundColor: difficultyColor + '15' }]}>
+          <Icon size={22} color={difficultyColor} strokeWidth={2} />
+        </View>
+        <View style={styles.recommendationContent}>
+          <View style={styles.recommendationHeader}>
+            <Text style={styles.recommendationTitle} numberOfLines={1}>
+              {recommendation.title}
+            </Text>
+            {recommendation.priority === 1 && (
+              <View style={styles.topPickBadge}>
+                <Sparkles size={10} color={colors.accent[400]} strokeWidth={2} />
+                <Text style={styles.topPickText}>Top Pick</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.recommendationReason} numberOfLines={2}>
+            {recommendation.reason}
+          </Text>
+          <View style={styles.recommendationMeta}>
+            <View style={[styles.difficultyBadge, { backgroundColor: difficultyColor + '20' }]}>
+              <Text style={[styles.difficultyText, { color: difficultyColor }]}>
+                {recommendation.difficulty}
+              </Text>
+            </View>
+            <View style={styles.recommendationTime}>
+              <Clock size={12} color={colors.neutral[500]} strokeWidth={2} />
+              <Text style={styles.recommendationTimeText}>{recommendation.estimated_minutes} min</Text>
+            </View>
+          </View>
+        </View>
+        <ChevronRight size={18} color={colors.neutral[600]} strokeWidth={2} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// SRS Review Banner Component
+function SRSReviewBanner({ dueCount, onPress }: { dueCount: number; onPress: () => void }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (dueCount > 0) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.02, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [dueCount]);
+
+  if (dueCount === 0) return null;
+
+  return (
+    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+      <Pressable style={({ pressed }) => [styles.srsReviewBanner, pressed && styles.cardPressed]} onPress={onPress}>
+        <View style={styles.srsReviewIcon}>
+          <RefreshCw size={20} color={colors.success[400]} strokeWidth={2} />
+        </View>
+        <View style={styles.srsReviewContent}>
+          <Text style={styles.srsReviewTitle}>Spaced Repetition Review</Text>
+          <Text style={styles.srsReviewSubtitle}>
+            {dueCount} {dueCount === 1 ? 'card' : 'cards'} ready for review
+          </Text>
+        </View>
+        <View style={styles.srsReviewBadge}>
+          <Text style={styles.srsReviewBadgeText}>{dueCount}</Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export default function HomeScreen() {
   const { state } = useLearning();
   const { getDueTodayWords, getStats } = useVocabulary();
   const { state: gamificationState } = useGamification();
+  const { recommendations, srsDueCount, isLoading: recommendationsLoading, refresh: refreshRecommendations } = useRecommendations();
+  const router = useRouter();
 
-  // If user hasn't completed placement test, show CTA
+  // Placement test CTA
   if (!state.hasCompletedPlacement) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.placementContainer}>
-          <View style={styles.placementIconContainer}>
-            <Target size={48} color={colors.primary[500]} strokeWidth={1.5} />
-          </View>
-          <Text style={styles.placementTitle}>Let's find your level</Text>
-          <Text style={styles.placementDescription}>
-            Take a quick speaking test to personalize your learning journey.
-            We'll assess your pronunciation, grammar, and fluency.
-          </Text>
-          <Link href="/placement-test" asChild>
-            <TouchableOpacity style={styles.placementButton} activeOpacity={0.85}>
-              <Text style={styles.placementButtonText}>Start Placement Test</Text>
-              <ChevronRight size={20} color={colors.neutral[0]} strokeWidth={2.5} />
-            </TouchableOpacity>
-          </Link>
-          <View style={styles.placementTimeContainer}>
-            <Clock size={14} color={colors.text.tertiary} strokeWidth={2} />
-            <Text style={styles.placementTime}>Takes about 5 minutes</Text>
+        <View style={styles.placementGradient}>
+          <View style={styles.placementContainer}>
+            <View style={styles.placementIconGlow}>
+              <View style={styles.placementIconContainer}>
+                <Target size={40} color={colors.primary[400]} strokeWidth={1.5} />
+              </View>
+            </View>
+            <Text style={styles.placementTitle}>Discover Your Level</Text>
+            <Text style={styles.placementSubtitle}>
+              Take a quick speaking test to unlock your personalized learning path
+            </Text>
+            <Link href="/placement-test" asChild>
+              <TouchableOpacity style={styles.placementButton} activeOpacity={0.9}>
+                <View style={styles.placementButtonGradient}>
+                  <Text style={styles.placementButtonText}>Begin Assessment</Text>
+                  <ChevronRight size={20} color={colors.neutral[0]} strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+            </Link>
+            <View style={styles.placementMeta}>
+              <Clock size={14} color={colors.neutral[500]} strokeWidth={2} />
+              <Text style={styles.placementMetaText}>5 minutes</Text>
+              <View style={styles.placementDot} />
+              <Mic2 size={14} color={colors.neutral[500]} strokeWidth={2} />
+              <Text style={styles.placementMetaText}>Voice-based</Text>
+            </View>
           </View>
         </View>
       </SafeAreaView>
     );
   }
 
-  const progressToNextLevel = 65; // TODO: Calculate from actual data
   const currentLevelIndex = CEFR_LEVELS.indexOf(state.cefrLevel || 'A1');
   const dailyProgress = state.dailyGoalMinutes > 0
     ? Math.min(state.todayStats.speakingMinutes / state.dailyGoalMinutes, 1)
     : 0;
+  const xpProgress = gamificationState.currentXP / gamificationState.xpToNextLevel;
 
   const vocabStats = getStats();
   const dueWords = getDueTodayWords();
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        bounces={true}
+      >
+        {/* Unified Hero Section */}
+        <View style={styles.unifiedHero}>
+          {/* Top Row - Date & CEFR Level */}
+          <View style={styles.heroTopRow}>
             <Text style={styles.dateText}>{formatDate()}</Text>
-            <Text style={styles.greeting}>Ready to practice?</Text>
+            <View style={styles.cefrPill}>
+              <Text style={styles.cefrPillText}>{state.cefrLevel || 'A1'}</Text>
+            </View>
           </View>
-          <View style={styles.weeklyStats}>
-            <Text style={styles.weeklyMinutes}>{state.weeklyStats.speakingMinutes}</Text>
-            <Text style={styles.weeklyLabel}>min this week</Text>
-          </View>
-        </View>
 
-        {/* Gamification - XP Bar and Streak */}
-        <View style={styles.gamificationSection}>
-          <XPBar showXPNumbers={true} />
-          <StreakBadge showDetails={true} />
-        </View>
+          {/* Greeting */}
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.heroSubtitle}>
+            {getMotivationalMessage(
+              gamificationState.streakDays || 0,
+              state.todayStats.speakingMinutes,
+              state.dailyGoalMinutes
+            )}
+          </Text>
 
-        {/* Warm-up Card - Show if available */}
-        {state.hasWarmupAvailable && (
-          <Link href="/warm-up" asChild>
-            <Pressable style={({ pressed }) => [styles.warmupCard, pressed && styles.cardPressed]}>
-              <View style={styles.warmupHeader}>
-                <View style={styles.warmupBadge}>
-                  <Sun size={14} color={colors.accent[400]} strokeWidth={2.5} />
-                  <Text style={styles.warmupBadgeText}>WARM-UP</Text>
-                </View>
-                <View style={styles.warmupTimeContainer}>
-                  <Clock size={14} color={colors.text.tertiary} strokeWidth={2} />
-                  <Text style={styles.warmupTime}>~2 min</Text>
-                </View>
+          {/* Unified Progress Ring */}
+          <View style={styles.unifiedRingWrapper}>
+            <UnifiedHeroRing
+              timeProgress={dailyProgress}
+              xpProgress={xpProgress}
+              todayMinutes={state.todayStats.speakingMinutes}
+              goalMinutes={state.dailyGoalMinutes}
+              streak={gamificationState.streakDays || 0}
+              level={gamificationState.level || 1}
+              currentXP={gamificationState.currentXP || 0}
+              xpToNext={gamificationState.xpToNextLevel || 100}
+              goalComplete={dailyProgress >= 1}
+            />
+
+            {/* Ring Legend */}
+            <View style={styles.ringLegend}>
+              <View style={styles.ringLegendItem}>
+                <View style={[styles.ringLegendDot, { backgroundColor: colors.primary[400] }]} />
+                <Text style={styles.ringLegendText}>Time</Text>
               </View>
-              <View style={styles.warmupContent}>
-                <BookOpen size={24} color={colors.accent[400]} strokeWidth={2} />
-                <View style={styles.warmupInfo}>
-                  <Text style={styles.warmupTitle}>Yesterday's Review</Text>
-                  <Text style={styles.warmupDescription}>
-                    Quick warm-up based on your last session
-                  </Text>
-                </View>
-                <ChevronRight size={20} color={colors.text.tertiary} strokeWidth={2} />
+              <View style={styles.ringLegendItem}>
+                <View style={[styles.ringLegendDot, { backgroundColor: colors.accent[400] }]} />
+                <Text style={styles.ringLegendText}>XP to level {(gamificationState.level || 1) + 1}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Continue Button - directly below ring */}
+          <Link href="/lesson" asChild>
+            <Pressable style={({ pressed }) => [
+              styles.continueButton,
+              pressed && styles.continueButtonPressed,
+              dailyProgress >= 1 && styles.continueButtonComplete
+            ]}>
+              <View style={styles.continueButtonInner}>
+                {dailyProgress >= 1 ? (
+                  <>
+                    <Sparkles size={20} color={colors.neutral[0]} strokeWidth={2} />
+                    <Text style={styles.continueButtonText}>Bonus Practice</Text>
+                  </>
+                ) : (
+                  <>
+                    <Play size={20} color={colors.neutral[0]} strokeWidth={2} fill={colors.neutral[0]} />
+                    <Text style={styles.continueButtonText}>
+                      {state.todayStats.speakingMinutes > 0 ? 'Continue' : 'Start Learning'}
+                    </Text>
+                  </>
+                )}
               </View>
             </Pressable>
           </Link>
+
+          {/* Weekly stats pill */}
+          <View style={styles.weeklyStatsPill}>
+            <Clock size={14} color={colors.neutral[400]} strokeWidth={2} />
+            <Text style={styles.weeklyStatsText}>
+              {state.weeklyStats.speakingMinutes} min this week
+            </Text>
+          </View>
+        </View>
+
+        {/* SRS Review Banner */}
+        {srsDueCount > 0 && (
+          <View style={styles.srsSection}>
+            <SRSReviewBanner
+              dueCount={srsDueCount}
+              onPress={() => router.push('/review' as any)}
+            />
+          </View>
         )}
 
-        {/* Vocabulary Review Card - Show if words are due */}
+        {/* Recommended for You Section */}
+        {recommendations.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionTitleContainer}>
+                <Sparkles size={16} color={colors.primary[500]} strokeWidth={2} />
+                <Text style={styles.sectionTitle}>Recommended for You</Text>
+              </View>
+              {recommendationsLoading && (
+                <ActivityIndicator size="small" color={colors.primary[500]} />
+              )}
+            </View>
+            <View style={styles.recommendationsContainer}>
+              {recommendations.slice(0, 3).map((rec, index) => (
+                <RecommendationCard
+                  key={rec.scenario_id || rec.lesson_id || index}
+                  recommendation={rec}
+                  index={index}
+                  onPress={() => {
+                    if (rec.type === 'practice' && rec.scenario_id) {
+                      router.push(`/conversation?scenarioId=${rec.scenario_id}` as any);
+                    } else if (rec.type === 'lesson' && rec.lesson_id) {
+                      router.push(`/lesson?lessonId=${rec.lesson_id}` as any);
+                    } else if (rec.type === 'review') {
+                      router.push('/review' as any);
+                    }
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Vocabulary Review Alert */}
         {dueWords.length > 0 && (
           <Link href="/vocabulary-review" asChild>
-            <Pressable style={({ pressed }) => [styles.vocabCard, pressed && styles.cardPressed]}>
-              <View style={styles.vocabHeader}>
-                <View style={styles.vocabBadge}>
-                  <Brain size={14} color={colors.neutral[0]} strokeWidth={2.5} />
-                  <Text style={styles.vocabBadgeText}>VOCABULARY</Text>
-                </View>
-                <View style={styles.vocabDueBadge}>
-                  <Text style={styles.vocabDueText}>{dueWords.length}</Text>
-                </View>
+            <Pressable style={({ pressed }) => [styles.vocabAlert, pressed && styles.cardPressed]}>
+              <View style={styles.vocabAlertIcon}>
+                <Brain size={20} color={colors.info[400]} strokeWidth={2} />
               </View>
-              <View style={styles.vocabContent}>
-                <BookOpen size={24} color={colors.info[400]} strokeWidth={2} />
-                <View style={styles.vocabInfo}>
-                  <Text style={styles.vocabTitle}>Review Vocabulary</Text>
-                  <Text style={styles.vocabDescription}>
-                    {dueWords.length} {dueWords.length === 1 ? 'word' : 'words'} ready to review
-                  </Text>
-                </View>
-                <ChevronRight size={20} color={colors.text.tertiary} strokeWidth={2} />
+              <View style={styles.vocabAlertContent}>
+                <Text style={styles.vocabAlertTitle}>Vocabulary Review</Text>
+                <Text style={styles.vocabAlertSubtitle}>
+                  {dueWords.length} {dueWords.length === 1 ? 'word' : 'words'} ready to practice
+                </Text>
+              </View>
+              <View style={styles.vocabAlertBadge}>
+                <Text style={styles.vocabAlertBadgeText}>{dueWords.length}</Text>
               </View>
             </Pressable>
           </Link>
         )}
 
-        {/* Daily Lesson Card */}
-        <Link href="/lesson" asChild>
-          <Pressable style={({ pressed }) => [styles.dailyLessonCard, pressed && styles.cardPressed]}>
-            <View style={styles.lessonHeader}>
-              <View style={styles.lessonBadge}>
-                <Zap size={12} color={colors.neutral[0]} strokeWidth={2.5} />
-                <Text style={styles.lessonBadgeText}>TODAY</Text>
+        {/* Progress Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>This Week</Text>
+            <TrendingUp size={16} color={colors.primary[500]} strokeWidth={2} />
+          </View>
+          <View style={styles.progressCard}>
+            <View style={styles.progressStats}>
+              <View style={styles.progressStatItem}>
+                <ProgressRing
+                  progress={state.weeklyStats.fluencyScore / 100}
+                  size={72}
+                  strokeWidth={6}
+                  gradientColors={[colors.primary[400], colors.primary[500]]}
+                >
+                  <Text style={styles.miniRingValue}>{state.weeklyStats.fluencyScore}%</Text>
+                </ProgressRing>
+                <Text style={styles.progressStatLabel}>Fluency</Text>
               </View>
-              <View style={styles.lessonTimeContainer}>
-                <Clock size={14} color={colors.text.tertiary} strokeWidth={2} />
-                <Text style={styles.lessonTime}>~15 min</Text>
+              <View style={styles.progressStatItem}>
+                <ProgressRing
+                  progress={state.weeklyStats.pronunciationScore / 100}
+                  size={72}
+                  strokeWidth={6}
+                  gradientColors={[colors.success[400], colors.success[500]]}
+                >
+                  <Text style={styles.miniRingValue}>{state.weeklyStats.pronunciationScore}%</Text>
+                </ProgressRing>
+                <Text style={styles.progressStatLabel}>Pronunciation</Text>
               </View>
-            </View>
-            <Text style={styles.lessonTitle}>Today's Speaking Session</Text>
-            <Text style={styles.lessonDescription}>
-              Practice conversation, pronunciation drills, and vocabulary
-            </Text>
-            <View style={styles.lessonProgress}>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { flex: dailyProgress }]} />
+              <View style={styles.progressStatItem}>
+                <ProgressRing
+                  progress={state.weeklyStats.grammarScore / 100}
+                  size={72}
+                  strokeWidth={6}
+                  gradientColors={[colors.accent[400], colors.accent[500]]}
+                >
+                  <Text style={styles.miniRingValue}>{state.weeklyStats.grammarScore}%</Text>
+                </ProgressRing>
+                <Text style={styles.progressStatLabel}>Grammar</Text>
               </View>
-              <Text style={styles.progressText}>
-                {state.todayStats.speakingMinutes}/{state.dailyGoalMinutes} min today
-              </Text>
-            </View>
-            <View style={styles.startButton}>
-              <Play size={18} color={colors.neutral[0]} strokeWidth={2.5} fill={colors.neutral[0]} />
-              <Text style={styles.startButtonText}>Start Session</Text>
-            </View>
-          </Pressable>
-        </Link>
-
-        {/* Current Level */}
-        <View style={styles.levelCard}>
-          <View style={styles.levelHeader}>
-            <Text style={styles.levelLabel}>Current Level</Text>
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelValue}>{state.cefrLevel || 'A1'}</Text>
             </View>
           </View>
-          <View style={styles.levelProgress}>
-            {CEFR_LEVELS.map((level, index) => (
-              <View key={level} style={styles.levelDotContainer}>
-                <View
-                  style={[
-                    styles.levelDot,
-                    index <= currentLevelIndex && styles.levelDotActive,
-                    index === currentLevelIndex && styles.levelDotCurrent,
-                  ]}
-                />
-                <Text style={[
-                  styles.levelDotText,
-                  index <= currentLevelIndex && styles.levelDotTextActive,
-                ]}>
-                  {level}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <View style={styles.levelProgressBar}>
-            <View style={[styles.levelProgressFill, { flex: progressToNextLevel / 100 }]} />
-          </View>
-          <Text style={styles.levelProgressText}>
-            {progressToNextLevel}% to {CEFR_LEVELS[currentLevelIndex + 1] || 'C1'}
-          </Text>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActionsContainer}>
-          <Text style={styles.sectionTitle}>Quick Practice</Text>
-
-          {/* Pronunciation Drill Card */}
-          <Link href="/pronunciation-drill" asChild>
-            <Pressable style={({ pressed }) => [styles.quickActionCard, pressed && styles.cardPressed]}>
-              <View style={styles.quickActionIconContainer}>
-                <Mic2 size={24} color={colors.primary[500]} strokeWidth={2} />
-              </View>
-              <View style={styles.quickActionInfo}>
-                <Text style={styles.quickActionTitle}>Pronunciation Drill</Text>
-                <Text style={styles.quickActionDescription}>
-                  Practice tricky sounds with instant feedback
-                </Text>
-              </View>
-              <ChevronRight size={20} color={colors.text.tertiary} strokeWidth={2} />
-            </Pressable>
-          </Link>
-
-          {/* Role Play Scenarios */}
-          <Link href="/role-play" asChild>
-            <Pressable style={({ pressed }) => [styles.quickActionCard, pressed && styles.cardPressed]}>
-              <View style={styles.quickActionIconContainer}>
-                <Users size={24} color={colors.accent[400]} strokeWidth={2} />
-              </View>
-              <View style={styles.quickActionInfo}>
-                <Text style={styles.quickActionTitle}>Role Play Scenarios</Text>
-                <Text style={styles.quickActionDescription}>
-                  Practice real conversations with AI personas
-                </Text>
-              </View>
-              <ChevronRight size={20} color={colors.text.tertiary} strokeWidth={2} />
-            </Pressable>
-          </Link>
-
-          {/* Vocabulary List */}
-          <Link href="/vocabulary" asChild>
-            <Pressable style={({ pressed }) => [styles.quickActionCard, pressed && styles.cardPressed]}>
-              <View style={styles.quickActionIconContainer}>
-                <Brain size={24} color={colors.info[400]} strokeWidth={2} />
-              </View>
-              <View style={styles.quickActionInfo}>
-                <View style={styles.vocabTitleRow}>
-                  <Text style={styles.quickActionTitle}>My Vocabulary</Text>
-                  {vocabStats.total > 0 && (
-                    <View style={styles.vocabCountBadge}>
-                      <Text style={styles.vocabCountText}>{vocabStats.total}</Text>
-                    </View>
+        {/* Level Journey */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Journey</Text>
+          <View style={styles.journeyCard}>
+            <View style={styles.journeyLevels}>
+              {CEFR_LEVELS.map((level, index) => (
+                <View key={level} style={styles.journeyLevelItem}>
+                  <View style={[
+                    styles.journeyDot,
+                    index < currentLevelIndex && styles.journeyDotCompleted,
+                    index === currentLevelIndex && styles.journeyDotCurrent,
+                  ]}>
+                    {index < currentLevelIndex && (
+                      <View style={styles.journeyDotInner} />
+                    )}
+                    {index === currentLevelIndex && (
+                      <View style={styles.journeyDotPulse} />
+                    )}
+                  </View>
+                  <Text style={[
+                    styles.journeyLevelText,
+                    index <= currentLevelIndex && styles.journeyLevelTextActive,
+                  ]}>
+                    {level}
+                  </Text>
+                  {index < CEFR_LEVELS.length - 1 && (
+                    <View style={[
+                      styles.journeyLine,
+                      index < currentLevelIndex && styles.journeyLineCompleted,
+                    ]} />
                   )}
                 </View>
-                <Text style={styles.quickActionDescription}>
-                  Review and manage your learned words
-                </Text>
-              </View>
-              <ChevronRight size={20} color={colors.text.tertiary} strokeWidth={2} />
-            </Pressable>
-          </Link>
-        </View>
-
-        {/* Analytics Snapshot */}
-        <View style={styles.analyticsCard}>
-          <View style={styles.analyticsHeader}>
-            <TrendingUp size={16} color={colors.primary[500]} strokeWidth={2} />
-            <Text style={styles.analyticsTitle}>This Week's Progress</Text>
-          </View>
-          <View style={styles.analyticsGrid}>
-            <View style={styles.analyticsItem}>
-              <Text style={styles.analyticsValue}>
-                {state.weeklyStats.fluencyScore}%
-              </Text>
-              <Text style={styles.analyticsLabel}>Fluency</Text>
-              <View style={[styles.analyticsBar, { backgroundColor: colors.primary[900] }]}>
-                <View style={[styles.analyticsBarFill, { flex: state.weeklyStats.fluencyScore / 100, backgroundColor: colors.primary[500] }]} />
-              </View>
+              ))}
             </View>
-            <View style={styles.analyticsItem}>
-              <Text style={styles.analyticsValue}>
-                {state.weeklyStats.pronunciationScore}%
-              </Text>
-              <Text style={styles.analyticsLabel}>Pronunciation</Text>
-              <View style={[styles.analyticsBar, { backgroundColor: colors.success[900] }]}>
-                <View style={[styles.analyticsBarFill, { flex: state.weeklyStats.pronunciationScore / 100, backgroundColor: colors.success[500] }]} />
-              </View>
-            </View>
-            <View style={styles.analyticsItem}>
-              <Text style={styles.analyticsValue}>
-                {state.weeklyStats.grammarScore}%
-              </Text>
-              <Text style={styles.analyticsLabel}>Grammar</Text>
-              <View style={[styles.analyticsBar, { backgroundColor: colors.accent[900] }]}>
-                <View style={[styles.analyticsBarFill, { flex: state.weeklyStats.grammarScore / 100, backgroundColor: colors.accent[500] }]} />
-              </View>
-            </View>
+            <Text style={styles.journeyProgress}>
+              Keep practicing to reach {CEFR_LEVELS[currentLevelIndex + 1] || 'fluency'}!
+            </Text>
           </View>
         </View>
 
@@ -310,490 +766,678 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: darkTheme.colors.background.primary,
   },
   scrollContent: {
-    paddingBottom: spacing[6],
+    paddingBottom: spacing[8],
   },
-  gamificationSection: {
+
+  // Unified Hero Section
+  unifiedHero: {
+    paddingTop: spacing[2],
     paddingHorizontal: layout.screenPadding,
-    marginBottom: spacing[4],
-    gap: spacing[3],
+    paddingBottom: spacing[6],
+    backgroundColor: darkTheme.colors.background.primary,
   },
-  // Placement Test CTA
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing[4],
+  },
+  dateText: {
+    ...textStyles.labelSmall,
+    color: colors.neutral[500],
+  },
+  cefrPill: {
+    backgroundColor: colors.primary[500] + '20',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: layout.radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary[500] + '30',
+  },
+  cefrPillText: {
+    ...textStyles.labelMedium,
+    color: colors.primary[400],
+    fontWeight: '700',
+  },
+  greeting: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.5,
+  },
+  heroSubtitle: {
+    ...textStyles.bodyMedium,
+    color: colors.neutral[500],
+    marginTop: spacing[1],
+    marginBottom: spacing[5],
+  },
+
+  // Unified Ring
+  unifiedRingWrapper: {
+    alignItems: 'center',
+    marginBottom: spacing[5],
+  },
+  unifiedRingContainer: {
+    width: 200,
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unifiedRingCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unifiedRingValue: {
+    fontSize: 44,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -1,
+  },
+  unifiedRingLabel: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+    marginTop: -2,
+  },
+  goalCompleteIcon: {
+    marginBottom: spacing[1],
+  },
+  streakBadgeFloat: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.accent[500] + '20',
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: layout.radius.full,
+    borderWidth: 1,
+    borderColor: colors.accent[400] + '30',
+  },
+  streakBadgeFloatText: {
+    ...textStyles.labelSmall,
+    color: colors.accent[400],
+    fontWeight: '700',
+  },
+  levelBadgeFloat: {
+    position: 'absolute',
+    bottom: 8,
+    backgroundColor: darkTheme.colors.background.elevated,
+    paddingHorizontal: spacing[2.5],
+    paddingVertical: spacing[1],
+    borderRadius: layout.radius.full,
+    borderWidth: 1,
+    borderColor: darkTheme.colors.border.light,
+  },
+  levelBadgeFloatText: {
+    ...textStyles.labelSmall,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  ringLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing[5],
+    marginTop: spacing[3],
+  },
+  ringLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1.5],
+  },
+  ringLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  ringLegendText: {
+    ...textStyles.caption,
+    color: colors.neutral[500],
+  },
+
+  // Continue Button
+  continueButton: {
+    backgroundColor: colors.primary[600],
+    borderRadius: layout.radius.xl,
+    marginBottom: spacing[4],
+    ...shadows.md,
+  },
+  continueButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  continueButtonComplete: {
+    backgroundColor: colors.success[600],
+  },
+  continueButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[6],
+  },
+  continueButtonText: {
+    ...textStyles.labelLarge,
+    color: colors.neutral[0],
+    fontWeight: '600',
+  },
+  weeklyStatsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[1.5],
+  },
+  weeklyStatsText: {
+    ...textStyles.caption,
+    color: colors.neutral[500],
+  },
+
+  // Legacy styles kept for other components
+  cardPressed: {
+    opacity: 0.95,
+    transform: [{ scale: 0.98 }],
+  },
+
+  // Warm-up Card
+  warmupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: layout.screenPadding,
+    padding: spacing[4],
+    backgroundColor: colors.accent[400] + '10',
+    borderRadius: layout.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.accent[400] + '20',
+    marginBottom: spacing[3],
+  },
+  warmupIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: layout.radius.lg,
+    backgroundColor: colors.accent[400] + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warmupContent: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  warmupTitle: {
+    ...textStyles.titleMedium,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  warmupSubtitle: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+  },
+  warmupTime: {
+    paddingHorizontal: spacing[2.5],
+    paddingVertical: spacing[1],
+    backgroundColor: colors.accent[400] + '20',
+    borderRadius: layout.radius.md,
+  },
+  warmupTimeText: {
+    ...textStyles.labelSmall,
+    color: colors.accent[400],
+    fontWeight: '600',
+  },
+
+  // Vocab Alert
+  vocabAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: layout.screenPadding,
+    padding: spacing[4],
+    backgroundColor: colors.info[500] + '10',
+    borderRadius: layout.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.info[500] + '20',
+    marginBottom: spacing[4],
+  },
+  vocabAlertIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: layout.radius.lg,
+    backgroundColor: colors.info[500] + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vocabAlertContent: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  vocabAlertTitle: {
+    ...textStyles.titleMedium,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  vocabAlertSubtitle: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+  },
+  vocabAlertBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.info[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vocabAlertBadgeText: {
+    ...textStyles.labelMedium,
+    color: colors.neutral[0],
+    fontWeight: '700',
+  },
+
+  // Sections
+  section: {
+    marginHorizontal: layout.screenPadding,
+    marginBottom: spacing[5],
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginBottom: spacing[3],
+  },
+  sectionTitle: {
+    ...textStyles.labelMedium,
+    color: colors.neutral[500],
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing[3],
+  },
+
+  // Quick Actions
+  quickActionsGrid: {
+    gap: spacing[2.5],
+  },
+  quickActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[4],
+    backgroundColor: colors.background.card,
+    borderRadius: layout.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  quickActionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: layout.radius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickActionInfo: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  quickActionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  quickActionTitle: {
+    ...textStyles.titleMedium,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  quickActionSubtitle: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+    marginTop: spacing[0.5],
+  },
+  badge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[0.5],
+    borderRadius: layout.radius.full,
+  },
+  badgeText: {
+    ...textStyles.labelSmall,
+    color: colors.neutral[0],
+    fontWeight: '700',
+  },
+
+  // Progress Card
+  progressCard: {
+    backgroundColor: colors.background.card,
+    borderRadius: layout.radius.xl,
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  progressStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  progressStatItem: {
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  progressStatLabel: {
+    ...textStyles.caption,
+    color: colors.neutral[500],
+  },
+  miniRingValue: {
+    ...textStyles.labelMedium,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  statPill: {
+    alignItems: 'center',
+    padding: spacing[3],
+    borderRadius: layout.radius.lg,
+    borderWidth: 1,
+    minWidth: 80,
+  },
+  statPillValue: {
+    ...textStyles.headlineMedium,
+    fontWeight: '700',
+  },
+  statPillLabel: {
+    ...textStyles.caption,
+    color: colors.neutral[500],
+    marginTop: spacing[0.5],
+  },
+
+  // Journey Card
+  journeyCard: {
+    backgroundColor: colors.background.card,
+    borderRadius: layout.radius.xl,
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  journeyLevels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing[4],
+  },
+  journeyLevelItem: {
+    alignItems: 'center',
+    position: 'relative',
+    flex: 1,
+  },
+  journeyDot: {
+    width: 20,
+    height: 20,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.neutral[700],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing[2],
+  },
+  journeyDotCompleted: {
+    backgroundColor: colors.primary[500],
+  },
+  journeyDotCurrent: {
+    backgroundColor: colors.primary[500],
+    width: 24,
+    height: 24,
+  },
+  journeyDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.neutral[0],
+  },
+  journeyDotPulse: {
+    width: 10,
+    height: 10,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.neutral[0],
+  },
+  journeyLine: {
+    position: 'absolute',
+    top: 10,
+    left: '60%',
+    right: '-40%',
+    height: 2,
+    backgroundColor: colors.neutral[700],
+  },
+  journeyLineCompleted: {
+    backgroundColor: colors.primary[500],
+  },
+  journeyLevelText: {
+    ...textStyles.labelSmall,
+    color: colors.neutral[600],
+  },
+  journeyLevelTextActive: {
+    color: colors.primary[400],
+    fontWeight: '600',
+  },
+  journeyProgress: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+    textAlign: 'center',
+  },
+
+  // Placement Test
+  placementGradient: {
+    flex: 1,
+    backgroundColor: colors.primary[900] + '20',
+  },
   placementContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing[8],
   },
-  placementIconContainer: {
-    width: 96,
-    height: 96,
+  placementIconGlow: {
+    padding: spacing[4],
     borderRadius: layout.radius.full,
-    backgroundColor: colors.primary[500] + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.primary[500] + '10',
     marginBottom: spacing[6],
   },
+  placementIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.primary[500] + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   placementTitle: {
-    ...textStyles.headlineLarge,
+    fontSize: 28,
+    fontWeight: '700',
     color: colors.text.primary,
     textAlign: 'center',
     marginBottom: spacing[3],
   },
-  placementDescription: {
+  placementSubtitle: {
     ...textStyles.bodyMedium,
-    color: colors.text.secondary,
+    color: colors.neutral[500],
     textAlign: 'center',
     marginBottom: spacing[8],
+    maxWidth: 280,
   },
   placementButton: {
-    backgroundColor: colors.primary[500],
-    paddingHorizontal: spacing[8],
-    paddingVertical: spacing[4],
-    borderRadius: layout.radius.lg,
     width: '100%',
+    borderRadius: layout.radius.xl,
+    overflow: 'hidden',
+    ...shadows.md,
+  },
+  placementButtonGradient: {
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[6],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[2],
-    ...shadows.md,
   },
   placementButtonText: {
     ...textStyles.labelLarge,
     color: colors.neutral[0],
+    fontWeight: '600',
   },
-  placementTimeContainer: {
+  placementMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1.5],
-    marginTop: spacing[4],
+    gap: spacing[2],
+    marginTop: spacing[5],
   },
-  placementTime: {
+  placementMetaText: {
     ...textStyles.caption,
-    color: colors.text.tertiary,
+    color: colors.neutral[500],
   },
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing[4],
-    paddingBottom: spacing[6],
+  placementDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.neutral[600],
   },
-  dateText: {
-    ...textStyles.labelSmall,
-    color: colors.text.tertiary,
-    marginBottom: spacing[1],
-  },
-  greeting: {
-    ...textStyles.headlineMedium,
-    color: colors.text.primary,
-  },
-  weeklyStats: {
-    alignItems: 'flex-end',
-  },
-  weeklyMinutes: {
-    ...textStyles.displaySmall,
-    color: colors.primary[500],
-  },
-  weeklyLabel: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
-  },
-  // Daily Lesson Card
-  dailyLessonCard: {
-    backgroundColor: colors.background.card,
+
+  // SRS Section
+  srsSection: {
     marginHorizontal: layout.screenPadding,
-    padding: spacing[5],
-    borderRadius: layout.radius['2xl'],
+    marginBottom: spacing[4],
+  },
+  srsReviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[4],
+    backgroundColor: colors.success[500] + '10',
+    borderRadius: layout.radius.xl,
     borderWidth: 1,
-    borderColor: colors.primary[500],
-    marginBottom: spacing[4],
-    ...shadows.lg,
+    borderColor: colors.success[500] + '20',
   },
-  cardPressed: {
-    opacity: 0.95,
-    transform: [{ scale: 0.995 }],
-  },
-  lessonHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing[4],
-  },
-  lessonBadge: {
-    backgroundColor: colors.primary[500],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1.5],
-    borderRadius: layout.radius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  lessonBadgeText: {
-    ...textStyles.labelSmall,
-    color: colors.neutral[0],
-  },
-  lessonTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  lessonTime: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
-  },
-  lessonTitle: {
-    ...textStyles.headlineSmall,
-    color: colors.text.primary,
-    marginBottom: spacing[2],
-  },
-  lessonDescription: {
-    ...textStyles.bodySmall,
-    color: colors.text.secondary,
-    marginBottom: spacing[5],
-  },
-  lessonProgress: {
-    marginBottom: spacing[5],
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: colors.neutral[800],
-    borderRadius: layout.radius.full,
-    marginBottom: spacing[2],
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: 6,
-    backgroundColor: colors.accent[400],
-    borderRadius: layout.radius.full,
-  },
-  progressText: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
-  },
-  startButton: {
-    backgroundColor: colors.primary[500],
-    paddingVertical: spacing[3.5],
+  srsReviewIcon: {
+    width: 44,
+    height: 44,
     borderRadius: layout.radius.lg,
+    backgroundColor: colors.success[500] + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  srsReviewContent: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  srsReviewTitle: {
+    ...textStyles.titleMedium,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  srsReviewSubtitle: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
+  },
+  srsReviewBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: layout.radius.full,
+    backgroundColor: colors.success[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  srsReviewBadgeText: {
+    ...textStyles.labelMedium,
+    color: colors.neutral[0],
+    fontWeight: '700',
+  },
+
+  // Section Header Row (for recommendations)
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[3],
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[2],
   },
-  startButtonText: {
-    ...textStyles.labelLarge,
-    color: colors.neutral[0],
+
+  // Recommendations
+  recommendationsContainer: {
+    gap: spacing[2.5],
   },
-  // Level Card
-  levelCard: {
-    backgroundColor: colors.background.card,
-    marginHorizontal: layout.screenPadding,
-    padding: spacing[5],
-    borderRadius: layout.radius.xl,
-    marginBottom: spacing[4],
-    ...shadows.sm,
-  },
-  levelHeader: {
+  recommendationCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing[4],
-  },
-  levelLabel: {
-    ...textStyles.labelMedium,
-    color: colors.text.tertiary,
-  },
-  levelBadge: {
-    backgroundColor: colors.accent[400] + '20',
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: layout.radius.md,
-  },
-  levelValue: {
-    ...textStyles.headlineMedium,
-    color: colors.accent[400],
-  },
-  levelProgress: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing[3],
-  },
-  levelDotContainer: {
-    alignItems: 'center',
-    gap: spacing[1.5],
-  },
-  levelDot: {
-    width: 8,
-    height: 8,
-    borderRadius: layout.radius.full,
-    backgroundColor: colors.neutral[700],
-  },
-  levelDotActive: {
-    backgroundColor: colors.primary[500],
-  },
-  levelDotCurrent: {
-    width: 12,
-    height: 12,
-    borderWidth: 2,
-    borderColor: colors.primary[400],
-  },
-  levelDotText: {
-    ...textStyles.labelSmall,
-    color: colors.text.disabled,
-  },
-  levelDotTextActive: {
-    color: colors.primary[400],
-  },
-  levelProgressBar: {
-    height: 4,
-    backgroundColor: colors.neutral[800],
-    borderRadius: layout.radius.full,
-    marginBottom: spacing[2],
-    flexDirection: 'row',
-  },
-  levelProgressFill: {
-    height: 4,
-    backgroundColor: colors.primary[500],
-    borderRadius: layout.radius.full,
-  },
-  levelProgressText: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
-    textAlign: 'center',
-  },
-  // Quick Actions Section
-  quickActionsContainer: {
-    marginHorizontal: layout.screenPadding,
-    marginBottom: spacing[4],
-  },
-  sectionTitle: {
-    ...textStyles.labelMedium,
-    color: colors.text.tertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing[3],
-  },
-  quickActionCard: {
-    backgroundColor: colors.background.card,
     padding: spacing[4],
+    backgroundColor: colors.background.card,
     borderRadius: layout.radius.xl,
-    marginBottom: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
-  quickActionIconContainer: {
+  recommendationIconContainer: {
     width: 48,
     height: 48,
     borderRadius: layout.radius.lg,
-    backgroundColor: colors.primary[500] + '15',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: spacing[4],
   },
-  quickActionInfo: {
+  recommendationContent: {
     flex: 1,
+    marginLeft: spacing[3],
   },
-  quickActionTitle: {
-    ...textStyles.titleLarge,
-    color: colors.text.primary,
-    marginBottom: spacing[1],
-  },
-  quickActionDescription: {
-    ...textStyles.bodySmall,
-    color: colors.text.secondary,
-  },
-  // Analytics Card
-  analyticsCard: {
-    backgroundColor: colors.background.card,
-    marginHorizontal: layout.screenPadding,
-    padding: spacing[5],
-    borderRadius: layout.radius.xl,
-    ...shadows.sm,
-  },
-  analyticsHeader: {
+  recommendationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-    marginBottom: spacing[5],
+    marginBottom: spacing[1],
   },
-  analyticsTitle: {
-    ...textStyles.labelMedium,
-    color: colors.text.tertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  analyticsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  analyticsItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  analyticsValue: {
-    ...textStyles.headlineMedium,
+  recommendationTitle: {
+    ...textStyles.titleMedium,
     color: colors.text.primary,
-    marginBottom: spacing[0.5],
+    fontWeight: '600',
+    flex: 1,
   },
-  analyticsLabel: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
+  topPickBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.accent[500] + '20',
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[0.5],
+    borderRadius: layout.radius.full,
+  },
+  topPickText: {
+    ...textStyles.labelSmall,
+    color: colors.accent[400],
+    fontWeight: '600',
+  },
+  recommendationReason: {
+    ...textStyles.bodySmall,
+    color: colors.neutral[500],
     marginBottom: spacing[2],
   },
-  analyticsBar: {
-    width: '100%',
-    height: 4,
-    borderRadius: layout.radius.full,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  analyticsBarFill: {
-    height: 4,
-    borderRadius: layout.radius.full,
-  },
-  bottomSpacer: {
-    height: spacing[6],
-  },
-  // Warm-up Card
-  warmupCard: {
-    backgroundColor: colors.accent[400] + '15',
-    marginHorizontal: layout.screenPadding,
-    padding: spacing[4],
-    borderRadius: layout.radius.xl,
-    borderWidth: 1,
-    borderColor: colors.accent[400] + '30',
-    marginBottom: spacing[4],
-    ...shadows.sm,
-  },
-  warmupHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing[3],
-  },
-  warmupBadge: {
-    backgroundColor: colors.accent[400],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1.5],
-    borderRadius: layout.radius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  warmupBadgeText: {
-    ...textStyles.labelSmall,
-    color: colors.neutral[0],
-    fontWeight: '700',
-  },
-  warmupTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  warmupTime: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
-  },
-  warmupContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  warmupInfo: {
-    flex: 1,
-  },
-  warmupTitle: {
-    ...textStyles.titleLarge,
-    color: colors.text.primary,
-    marginBottom: spacing[1],
-  },
-  warmupDescription: {
-    ...textStyles.bodySmall,
-    color: colors.text.secondary,
-  },
-  // Vocabulary Card
-  vocabCard: {
-    backgroundColor: colors.info[500] + '15',
-    marginHorizontal: layout.screenPadding,
-    padding: spacing[4],
-    borderRadius: layout.radius.xl,
-    borderWidth: 1,
-    borderColor: colors.info[500] + '30',
-    marginBottom: spacing[4],
-    ...shadows.sm,
-  },
-  vocabHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing[3],
-  },
-  vocabBadge: {
-    backgroundColor: colors.info[500],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1.5],
-    borderRadius: layout.radius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  vocabBadgeText: {
-    ...textStyles.labelSmall,
-    color: colors.neutral[0],
-    fontWeight: '700',
-  },
-  vocabDueBadge: {
-    backgroundColor: colors.info[500],
-    width: 28,
-    height: 28,
-    borderRadius: layout.radius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vocabDueText: {
-    ...textStyles.labelMedium,
-    color: colors.neutral[0],
-    fontWeight: '700',
-  },
-  vocabContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  vocabInfo: {
-    flex: 1,
-  },
-  vocabTitle: {
-    ...textStyles.titleLarge,
-    color: colors.text.primary,
-    marginBottom: spacing[1],
-  },
-  vocabDescription: {
-    ...textStyles.bodySmall,
-    color: colors.text.secondary,
-  },
-  vocabTitleRow: {
+  recommendationMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-    marginBottom: spacing[1],
   },
-  vocabCountBadge: {
-    backgroundColor: colors.info[500] + '30',
+  difficultyBadge: {
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[0.5],
     borderRadius: layout.radius.md,
   },
-  vocabCountText: {
+  difficultyText: {
+    ...textStyles.labelSmall,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  recommendationTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  recommendationTimeText: {
     ...textStyles.caption,
-    color: colors.info[400],
-    fontWeight: '700',
+    color: colors.neutral[500],
+  },
+
+  bottomSpacer: {
+    height: spacing[4],
   },
 });

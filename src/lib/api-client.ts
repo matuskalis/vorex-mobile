@@ -489,6 +489,297 @@ class ApiClient {
       };
     }
   }
+
+  // ============================================
+  // SRS (Spaced Repetition System) Endpoints
+  // ============================================
+
+  /**
+   * Get SRS cards due for review
+   */
+  async getSRSDueCards(limit: number = 20): Promise<{
+    cards: SRSCard[];
+    total_due: number;
+  }> {
+    return this.request<{
+      cards: SRSCard[];
+      total_due: number;
+    }>(`/api/srs/due?limit=${limit}`);
+  }
+
+  /**
+   * Submit a review for an SRS card
+   */
+  async submitSRSReview(
+    cardId: string,
+    quality: number,
+    options?: {
+      response_time_ms?: number;
+      was_audio?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    card: SRSCard;
+    next_review: string;
+    interval_days: number;
+  }> {
+    return this.request<{
+      success: boolean;
+      card: SRSCard;
+      next_review: string;
+      interval_days: number;
+    }>('/api/srs/review', {
+      method: 'POST',
+      body: JSON.stringify({
+        card_id: cardId,
+        quality,
+        ...options,
+      }),
+    });
+  }
+
+  /**
+   * Create an SRS card from a grammar/pronunciation error
+   */
+  async createSRSCardFromError(errorId: string): Promise<{
+    success: boolean;
+    card: SRSCard;
+  }> {
+    return this.request<{
+      success: boolean;
+      card: SRSCard;
+    }>(`/api/srs/from-error/${errorId}`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Get SRS statistics
+   */
+  async getSRSStats(): Promise<{
+    total_cards: number;
+    cards_due_today: number;
+    cards_learned: number;
+    cards_learning: number;
+    average_retention: number;
+    streak_days: number;
+  }> {
+    return this.request('/api/srs/stats');
+  }
+
+  // ============================================
+  // Session Endpoints
+  // ============================================
+
+  /**
+   * Save a practice session result
+   */
+  async saveSessionResult(data: SessionSaveData): Promise<{
+    success: boolean;
+    session_id: string;
+    xp_earned: number;
+    streak_updated: boolean;
+  }> {
+    return this.request<{
+      success: boolean;
+      session_id: string;
+      xp_earned: number;
+      streak_updated: boolean;
+    }>('/api/sessions/save', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Get session history with optional filters
+   */
+  async getSessionHistory(options?: {
+    limit?: number;
+    offset?: number;
+    scenario_id?: string;
+    date_from?: string;
+    date_to?: string;
+  }): Promise<{
+    sessions: SessionHistoryItem[];
+    total: number;
+    has_more: boolean;
+  }> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+    if (options?.scenario_id) params.append('scenario_id', options.scenario_id);
+    if (options?.date_from) params.append('date_from', options.date_from);
+    if (options?.date_to) params.append('date_to', options.date_to);
+
+    const queryString = params.toString();
+    return this.request<{
+      sessions: SessionHistoryItem[];
+      total: number;
+      has_more: boolean;
+    }>(`/api/sessions/history${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get aggregated session statistics
+   */
+  async getSessionStats(period: 'day' | 'week' | 'month' | 'all' = 'week'): Promise<SessionStats> {
+    return this.request<SessionStats>(`/api/sessions/stats?period=${period}`);
+  }
+
+  /**
+   * Get daily breakdown for progress visualization
+   */
+  async getDailyBreakdown(days: number = 7): Promise<{
+    days: DailyBreakdownItem[];
+    totals: {
+      sessions: number;
+      minutes: number;
+      xp: number;
+    };
+  }> {
+    return this.request(`/api/sessions/daily-breakdown?days=${days}`);
+  }
+
+  // ============================================
+  // Recommendation Endpoints
+  // ============================================
+
+  /**
+   * Get AI-powered lesson recommendations
+   */
+  async getRecommendations(): Promise<{
+    recommendations: LessonRecommendation[];
+    reasoning: string;
+  }> {
+    return this.request('/api/recommendations');
+  }
+
+  /**
+   * Get scenarios with completion status
+   */
+  async getScenariosWithProgress(): Promise<{
+    scenarios: ScenarioWithProgress[];
+  }> {
+    return this.request('/api/practice/scenarios');
+  }
+
+  // ============================================
+  // Skills Endpoints
+  // ============================================
+
+  /**
+   * Get user's skill profile including XP, levels, and progress
+   */
+  async getSkillProfile(): Promise<SkillProfile> {
+    return this.request('/api/skills/profile');
+  }
+}
+
+// ============================================
+// Type Definitions
+// ============================================
+
+export interface SRSCard {
+  card_id: string;
+  user_id: string;
+  front: string;
+  back: string;
+  card_type: 'vocabulary' | 'grammar' | 'pronunciation';
+  source_error_id?: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  next_review: string;
+  last_review?: string;
+  created_at: string;
+}
+
+export interface SessionSaveData {
+  scenario_id: string;
+  duration_seconds: number;
+  turns_count: number;
+  pronunciation_score?: number;
+  fluency_score?: number;
+  grammar_errors: Array<{
+    type: string;
+    user_sentence: string;
+    corrected_sentence: string;
+    explanation: string;
+  }>;
+  pronunciation_errors?: string[];
+  completed: boolean;
+}
+
+export interface SessionHistoryItem {
+  session_id: string;
+  scenario_id: string;
+  scenario_title: string;
+  started_at: string;
+  duration_seconds: number;
+  turns_count: number;
+  pronunciation_score?: number;
+  fluency_score?: number;
+  grammar_error_count: number;
+  xp_earned: number;
+  completed: boolean;
+}
+
+export interface SessionStats {
+  total_sessions: number;
+  total_minutes: number;
+  total_xp: number;
+  average_pronunciation: number;
+  average_fluency: number;
+  most_practiced_scenario: string | null;
+  sessions_by_day: Record<string, number>;
+  pronunciation_trend: number[];
+  grammar_improvement: number;
+}
+
+export interface DailyBreakdownItem {
+  date: string;
+  sessions: number;
+  minutes: number;
+  xp: number;
+  pronunciation_avg?: number;
+}
+
+export interface LessonRecommendation {
+  lesson_id?: string;
+  scenario_id?: string;
+  type: 'lesson' | 'practice' | 'review';
+  title: string;
+  description: string;
+  reason: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  estimated_minutes: number;
+  priority: number;
+}
+
+export interface ScenarioWithProgress {
+  scenario_id: string;
+  title: string;
+  description: string;
+  difficulty: string;
+  category: string;
+  estimated_minutes: number;
+  times_practiced: number;
+  last_practiced?: string;
+  best_pronunciation_score?: number;
+  completed: boolean;
+}
+
+export interface SkillProfile {
+  total_xp: number;
+  overall_level: number;
+  skills: Record<string, {
+    level: number;
+    xp: number;
+    p_learned: number;
+  }>;
+  unlocked_content: string[];
+  earned_achievements: string[];
 }
 
 export const apiClient = new ApiClient();

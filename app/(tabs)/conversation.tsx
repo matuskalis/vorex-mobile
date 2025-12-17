@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,118 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Dimensions,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
 import { router, Link } from 'expo-router';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { apiClient } from '../../src/lib/api-client';
-import { Mic, Square, Clock, ChevronUp, ChevronDown, X, Volume2, Zap } from 'lucide-react-native';
-import { colors, spacing, layout, textStyles, shadows } from '../../src/theme';
+import {
+  Mic,
+  Square,
+  Clock,
+  ChevronUp,
+  ChevronDown,
+  X,
+  Volume2,
+  Zap,
+  MessageCircle,
+  BookOpen,
+  Target,
+  ChevronRight,
+  Coffee,
+  Plane,
+  ShoppingCart,
+  Utensils,
+  Briefcase,
+  Phone,
+  Award,
+  Search,
+  Filter,
+  Check,
+} from 'lucide-react-native';
+import { darkTheme, colors, spacing, layout, textStyles } from '../../src/theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Practice exercise types
+type ExerciseType = 'conversation' | 'vocabulary' | 'pronunciation';
+
+type Exercise = {
+  id: string;
+  type: ExerciseType;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  duration: string;
+  color: string;
+};
+
+const PRACTICE_EXERCISES: Exercise[] = [
+  {
+    id: 'coffee_shop',
+    type: 'conversation',
+    title: 'Coffee Shop Order',
+    description: 'Practice ordering drinks and snacks',
+    icon: <Coffee size={24} color={colors.primary[400]} strokeWidth={2} />,
+    difficulty: 'Easy',
+    duration: '5-10 min',
+    color: colors.primary[500],
+  },
+  {
+    id: 'restaurant',
+    type: 'conversation',
+    title: 'Restaurant Reservation',
+    description: 'Book a table and order food',
+    icon: <Utensils size={24} color={colors.accent[400]} strokeWidth={2} />,
+    difficulty: 'Medium',
+    duration: '8-12 min',
+    color: colors.accent[500],
+  },
+  {
+    id: 'airport',
+    type: 'conversation',
+    title: 'Airport Check-in',
+    description: 'Navigate boarding and luggage',
+    icon: <Plane size={24} color={colors.info[400]} strokeWidth={2} />,
+    difficulty: 'Medium',
+    duration: '10-15 min',
+    color: colors.info[500],
+  },
+  {
+    id: 'shopping',
+    type: 'conversation',
+    title: 'Shopping Assistant',
+    description: 'Ask for help, sizes, and prices',
+    icon: <ShoppingCart size={24} color={colors.success[400]} strokeWidth={2} />,
+    difficulty: 'Easy',
+    duration: '5-8 min',
+    color: colors.success[500],
+  },
+  {
+    id: 'job_interview',
+    type: 'conversation',
+    title: 'Job Interview',
+    description: 'Practice professional responses',
+    icon: <Briefcase size={24} color={colors.warning[400]} strokeWidth={2} />,
+    difficulty: 'Hard',
+    duration: '15-20 min',
+    color: colors.warning[500],
+  },
+  {
+    id: 'phone_call',
+    type: 'conversation',
+    title: 'Phone Appointment',
+    description: 'Schedule meetings over the phone',
+    icon: <Phone size={24} color={colors.error[400]} strokeWidth={2} />,
+    difficulty: 'Medium',
+    duration: '5-10 min',
+    color: colors.error[500],
+  },
+];
 
 type Message = {
   id: number;
@@ -26,23 +131,117 @@ type Message = {
   audioUri?: string;
 };
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: 1,
-    type: 'ai',
-    text: 'Hello! Welcome to the coffee shop. What can I get for you today?',
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  },
-];
+// Audio waveform visualization component
+function AudioWaveform({ isActive, color }: { isActive: boolean; color: string }) {
+  const bars = 5;
+  const animatedValues = useRef(
+    Array(bars).fill(null).map(() => new Animated.Value(0.3))
+  ).current;
 
-const SCENARIO_ID = 'coffee_shop';
-const SCENARIO_NAME = 'Coffee Shop Order';
+  useEffect(() => {
+    if (isActive) {
+      const animations = animatedValues.map((anim, i) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(anim, {
+              toValue: 0.3 + Math.random() * 0.7,
+              duration: 200 + i * 50,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0.3,
+              duration: 200 + i * 50,
+              useNativeDriver: true,
+            }),
+          ])
+        )
+      );
+      Animated.parallel(animations).start();
+    } else {
+      animatedValues.forEach(anim => anim.setValue(0.3));
+    }
+  }, [isActive]);
+
+  return (
+    <View style={styles.waveformContainer}>
+      {animatedValues.map((anim, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.waveformBar,
+            {
+              backgroundColor: color,
+              transform: [{ scaleY: anim }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+// Score ring component
+function ScoreRing({
+  score,
+  size = 44,
+  strokeWidth = 4,
+  color,
+}: {
+  score: number;
+  size?: number;
+  strokeWidth?: number;
+  color: string;
+}) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const progress = Math.min(score / 100, 1);
+  const strokeDashoffset = circumference - progress * circumference;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={darkTheme.colors.border.default}
+          strokeWidth={strokeWidth}
+          fill="transparent"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="transparent"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+        />
+      </Svg>
+      <Text style={[styles.scoreRingValue, { color }]}>{score}</Text>
+    </View>
+  );
+}
+
+// Difficulty filter options
+type DifficultyFilter = 'All' | 'Easy' | 'Medium' | 'Hard';
+const DIFFICULTY_FILTERS: DifficultyFilter[] = ['All', 'Easy', 'Medium', 'Hard'];
+
+// Get count per difficulty
+const getDifficultyCount = (difficulty: DifficultyFilter): number => {
+  if (difficulty === 'All') return PRACTICE_EXERCISES.length;
+  return PRACTICE_EXERCISES.filter(e => e.difficulty === difficulty).length;
+};
 
 export default function ConversationScreen() {
+  const [mode, setMode] = useState<'select' | 'active'>('select');
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFeedbackExpanded, setIsFeedbackExpanded] = useState(true);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [pronunciationScore, setPronunciationScore] = useState(0);
   const [fluencyScore, setFluencyScore] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -54,6 +253,26 @@ export default function ConversationScreen() {
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('All');
+  const [isSavingSession, setIsSavingSession] = useState(false);
+
+  // Filtered exercises
+  const filteredExercises = useMemo(() => {
+    return PRACTICE_EXERCISES.filter((exercise) => {
+      // Search filter
+      const matchesSearch = searchQuery === '' ||
+        exercise.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        exercise.description.toLowerCase().includes(searchQuery.toLowerCase());
+
+      // Difficulty filter
+      const matchesDifficulty = difficultyFilter === 'All' || exercise.difficulty === difficultyFilter;
+
+      return matchesSearch && matchesDifficulty;
+    });
+  }, [searchQuery, difficultyFilter]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -70,15 +289,19 @@ export default function ConversationScreen() {
         playsInSilentModeIOS: true,
       });
     })();
+  }, []);
 
-    timerRef.current = setInterval(() => {
-      setSessionTime(prev => prev + 1);
-    }, 1000);
+  useEffect(() => {
+    if (mode === 'active') {
+      timerRef.current = setInterval(() => {
+        setSessionTime(prev => prev + 1);
+      }, 1000);
+    }
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     if (isRecording) {
@@ -105,6 +328,34 @@ export default function ConversationScreen() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const startExercise = (exercise: Exercise) => {
+    setSelectedExercise(exercise);
+    setMessages([
+      {
+        id: 1,
+        type: 'ai',
+        text: getInitialMessage(exercise.id),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+    setSessionTime(0);
+    setPronunciationScore(0);
+    setFluencyScore(0);
+    setMode('active');
+  };
+
+  const getInitialMessage = (scenarioId: string): string => {
+    const messages: Record<string, string> = {
+      coffee_shop: "Hello! Welcome to the coffee shop. What can I get for you today?",
+      restaurant: "Good evening! Welcome to La Bella Italia. Do you have a reservation?",
+      airport: "Next in line please. May I see your passport and boarding pass?",
+      shopping: "Hi there! Welcome to the store. Are you looking for anything in particular?",
+      job_interview: "Please, have a seat. Thank you for coming in today. Tell me about yourself.",
+      phone_call: "Hello, thank you for calling. How may I help you today?",
+    };
+    return messages[scenarioId] || "Hello! How can I help you today?";
   };
 
   const speakMessage = async (text: string) => {
@@ -174,7 +425,7 @@ export default function ConversationScreen() {
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!recording || !selectedExercise) return;
 
     try {
       setIsRecording(false);
@@ -196,15 +447,6 @@ export default function ConversationScreen() {
       if (!result.success) {
         const errorMessage = result.error || 'Speech analysis failed';
         setLastError(errorMessage);
-
-        const errorMessageObj: Message = {
-          id: messages.length + 1,
-          type: 'user',
-          text: `[TRANSCRIPTION ERROR: ${errorMessage}]`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          audioUri: uri,
-        };
-        setMessages(prev => [...prev, errorMessageObj]);
         setIsProcessing(false);
         return;
       }
@@ -229,7 +471,7 @@ export default function ConversationScreen() {
         try {
           const tutorResponse = await apiClient.getTutorResponse(
             userText,
-            SCENARIO_ID,
+            selectedExercise.id,
             tutorSessionId || undefined,
             turnNumber
           );
@@ -248,14 +490,6 @@ export default function ConversationScreen() {
             };
             setMessages(prev => [...prev, aiMessage]);
             speakMessage(tutorResponse.message);
-          } else {
-            const errorMessage: Message = {
-              id: messages.length + 2,
-              type: 'ai',
-              text: `[Tutor unavailable: ${tutorResponse.error || 'Unknown error'}]`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            setMessages(prev => [...prev, errorMessage]);
           }
         } catch (err) {
           console.error('Tutor API error:', err);
@@ -263,12 +497,10 @@ export default function ConversationScreen() {
           setIsLoadingAI(false);
         }
       }
-
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       console.error('Failed to process recording:', errorMsg);
       setLastError(errorMsg);
-      Alert.alert('Recording Error', errorMsg);
     } finally {
       setIsProcessing(false);
     }
@@ -282,6 +514,27 @@ export default function ConversationScreen() {
     }
   };
 
+  const saveSessionToBackend = async () => {
+    if (!selectedExercise || turnNumber === 0) return;
+
+    try {
+      setIsSavingSession(true);
+      await apiClient.saveSessionResult({
+        session_type: 'conversation',
+        scenario_id: selectedExercise.id,
+        duration_seconds: sessionTime,
+        turn_count: turnNumber,
+        pronunciation_score: pronunciationScore,
+        fluency_score: fluencyScore,
+        average_score: Math.round((pronunciationScore + fluencyScore) / 2),
+      });
+    } catch (error) {
+      console.error('Failed to save session:', error);
+    } finally {
+      setIsSavingSession(false);
+    }
+  };
+
   const handleEndConversation = () => {
     Alert.alert(
       'End Conversation?',
@@ -291,37 +544,16 @@ export default function ConversationScreen() {
         {
           text: 'End',
           style: 'destructive',
-          onPress: () => {
-            // Calculate session stats
-            const wordsSpoken = messages.filter(m => m.type === 'user').reduce((acc, m) => {
-              return acc + m.text.split(' ').length;
-            }, 0);
-
-            const mispronuncedWords = messages
-              .filter(m => m.type === 'user' && m.mispronounced)
-              .flatMap(m => m.mispronounced || []);
-
-            // Navigate to session summary with stats
-            router.push({
-              pathname: '/session-summary',
-              params: {
-                speakingMinutes: Math.ceil(sessionTime / 60),
-                wordsSpoken: wordsSpoken.toString(),
-                pronunciationScore: pronunciationScore.toString(),
-                fluencyScore: fluencyScore.toString(),
-                thingsDoneWell: JSON.stringify([
-                  'Clear pronunciation',
-                  'Natural conversation flow',
-                  'Good vocabulary usage',
-                ]),
-                areasToImprove: JSON.stringify([
-                  mispronuncedWords.length > 0 ? `Practice words: ${mispronuncedWords.slice(0, 3).join(', ')}` : 'Keep practicing pronunciation',
-                  'Use more varied expressions',
-                  'Work on sentence stress',
-                ]),
-                vocabularyLearned: JSON.stringify(['latte', 'espresso', 'foam']),
-              },
-            });
+          onPress: async () => {
+            await saveSessionToBackend();
+            setMode('select');
+            setSelectedExercise(null);
+            setMessages([]);
+            setSessionTime(0);
+            setTutorSessionId(null);
+            setTurnNumber(0);
+            setPronunciationScore(0);
+            setFluencyScore(0);
           },
         },
       ]
@@ -334,74 +566,174 @@ export default function ConversationScreen() {
     return colors.error[500];
   };
 
-  const renderMessage = (message: Message) => {
-    const isUser = message.type === 'user';
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy':
+        return colors.success[500];
+      case 'Medium':
+        return colors.accent[500];
+      case 'Hard':
+        return colors.error[500];
+      default:
+        return colors.neutral[500];
+    }
+  };
 
+  // Selection Mode
+  if (mode === 'select') {
     return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageContainer,
-          isUser ? styles.userMessageContainer : styles.aiMessageContainer,
-        ]}
-      >
-        <View
-          style={[
-            styles.messageBubble,
-            isUser ? styles.userBubble : styles.aiBubble,
-          ]}
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.selectHeader}>
+          <View>
+            <Text style={styles.selectTitle}>Practice</Text>
+            <Text style={styles.selectSubtitle}>Choose an exercise to start</Text>
+          </View>
+          <View style={styles.headerBadge}>
+            <Award size={14} color={colors.accent[500]} strokeWidth={2.5} />
+            <Text style={styles.headerBadgeText}>6 scenarios</Text>
+          </View>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Search size={18} color={colors.neutral[500]} strokeWidth={2} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search scenarios..."
+              placeholderTextColor={colors.neutral[500]}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery !== '' && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <X size={16} color={colors.neutral[500]} strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Difficulty Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterChipsContainer}
+          contentContainerStyle={styles.filterChipsContent}
         >
-          <Text style={styles.messageText}>
-            {message.text.split(' ').map((word, index) => {
-              const cleanWord = word.replace(/[.,!?]/g, '');
-              const isMispronounced = message.mispronounced?.includes(cleanWord);
+          {DIFFICULTY_FILTERS.map((difficulty) => (
+            <TouchableOpacity
+              key={difficulty}
+              style={[
+                styles.filterChip,
+                difficultyFilter === difficulty && styles.filterChipActive,
+              ]}
+              onPress={() => setDifficultyFilter(difficulty)}
+              activeOpacity={0.7}
+            >
+              {difficultyFilter === difficulty && (
+                <Check size={12} color={colors.neutral[0]} strokeWidth={3} />
+              )}
+              <Text
+                style={[
+                  styles.filterChipText,
+                  difficultyFilter === difficulty && styles.filterChipTextActive,
+                ]}
+              >
+                {difficulty} ({getDifficultyCount(difficulty)})
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
-              return (
-                <Text
-                  key={index}
-                  style={isMispronounced ? styles.mispronounced : undefined}
-                >
-                  {word}{' '}
-                </Text>
-              );
-            })}
-          </Text>
-          <Text style={styles.timestamp}>{message.timestamp}</Text>
+        {/* Quick Actions */}
+        <View style={styles.quickActionsRow}>
+          <Link href="/realtime-conversation" asChild>
+            <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.7}>
+              <View style={[styles.quickActionIcon, { backgroundColor: colors.primary[500] + '20' }]}>
+                <Zap size={20} color={colors.primary[500]} strokeWidth={2.5} />
+              </View>
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Instant Voice</Text>
+                <Text style={styles.quickActionDesc}>Ultra-low latency AI</Text>
+              </View>
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>NEW</Text>
+              </View>
+            </TouchableOpacity>
+          </Link>
         </View>
-      </View>
+
+        {/* Exercise Cards */}
+        <ScrollView style={styles.exerciseList} showsVerticalScrollIndicator={false}>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>Conversation Scenarios</Text>
+            <Text style={styles.sectionCount}>{filteredExercises.length} found</Text>
+          </View>
+
+          {filteredExercises.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Search size={40} color={colors.neutral[600]} strokeWidth={1.5} />
+              <Text style={styles.emptyStateText}>No scenarios match your filters</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('');
+                  setDifficultyFilter('All');
+                }}
+              >
+                <Text style={styles.emptyStateAction}>Clear filters</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {filteredExercises.map((exercise) => (
+            <TouchableOpacity
+              key={exercise.id}
+              style={styles.exerciseCard}
+              onPress={() => startExercise(exercise)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.exerciseIconWrap, { backgroundColor: exercise.color + '15' }]}>
+                {exercise.icon}
+              </View>
+
+              <View style={styles.exerciseContent}>
+                <Text style={styles.exerciseTitle}>{exercise.title}</Text>
+                <Text style={styles.exerciseDesc}>{exercise.description}</Text>
+
+                <View style={styles.exerciseMeta}>
+                  <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(exercise.difficulty) + '20' }]}>
+                    <View style={[styles.difficultyDot, { backgroundColor: getDifficultyColor(exercise.difficulty) }]} />
+                    <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty) }]}>
+                      {exercise.difficulty}
+                    </Text>
+                  </View>
+                  <View style={styles.durationBadge}>
+                    <Clock size={12} color={darkTheme.colors.text.tertiary} strokeWidth={2} />
+                    <Text style={styles.durationText}>{exercise.duration}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <ChevronRight size={20} color={darkTheme.colors.text.tertiary} strokeWidth={2} />
+            </TouchableOpacity>
+          ))}
+
+          <View style={{ height: spacing[8] }} />
+        </ScrollView>
+      </SafeAreaView>
     );
-  };
+  }
 
-  const renderGauge = (label: string, score: number) => {
-    return (
-      <View style={styles.gaugeContainer}>
-        <View style={styles.gaugeHeader}>
-          <Text style={styles.gaugeLabel}>{label}</Text>
-          <Text style={[styles.gaugeScore, { color: getScoreColor(score) }]}>{score}%</Text>
-        </View>
-        <View style={styles.gaugeBar}>
-          <View
-            style={[
-              styles.gaugeFill,
-              {
-                flex: score / 100,
-                backgroundColor: getScoreColor(score),
-              },
-            ]}
-          />
-        </View>
-      </View>
-    );
-  };
-
+  // Active Conversation Mode
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.scenarioName}>{SCENARIO_NAME}</Text>
+          <Text style={styles.scenarioName}>{selectedExercise?.title}</Text>
           <View style={styles.timeContainer}>
-            <Clock size={14} color={colors.primary[500]} strokeWidth={2} />
+            <Clock size={14} color={colors.primary[400]} strokeWidth={2.5} />
             <Text style={styles.timeText}>{formatTime(sessionTime)}</Text>
           </View>
         </View>
@@ -414,21 +746,7 @@ export default function ConversationScreen() {
         </Pressable>
       </View>
 
-      {/* Try Realtime Banner */}
-      <Link href="/realtime-conversation" asChild>
-        <Pressable style={({ pressed }) => [styles.realtimeBanner, pressed && styles.realtimeBannerPressed]}>
-          <View style={styles.realtimeBannerContent}>
-            <View style={styles.realtimeBadge}>
-              <Zap size={12} color={colors.neutral[0]} strokeWidth={2.5} />
-              <Text style={styles.realtimeBadgeText}>NEW</Text>
-            </View>
-            <Text style={styles.realtimeBannerTitle}>Try Instant AI Voice Chat</Text>
-            <Text style={styles.realtimeBannerDesc}>Ultra-low latency conversations</Text>
-          </View>
-        </Pressable>
-      </Link>
-
-      {/* Feedback Panel */}
+      {/* Real-time Feedback Panel */}
       <View style={styles.feedbackPanel}>
         <Pressable
           style={styles.feedbackHeader}
@@ -436,16 +754,37 @@ export default function ConversationScreen() {
         >
           <Text style={styles.feedbackTitle}>Real-time Feedback</Text>
           {isFeedbackExpanded ? (
-            <ChevronUp size={18} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronUp size={18} color={darkTheme.colors.text.secondary} strokeWidth={2} />
           ) : (
-            <ChevronDown size={18} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronDown size={18} color={darkTheme.colors.text.secondary} strokeWidth={2} />
           )}
         </Pressable>
 
         {isFeedbackExpanded && (
           <View style={styles.feedbackContent}>
-            {renderGauge('Pronunciation', pronunciationScore)}
-            {renderGauge('Fluency', fluencyScore)}
+            <View style={styles.feedbackScores}>
+              <View style={styles.feedbackScoreItem}>
+                <ScoreRing score={pronunciationScore} color={getScoreColor(pronunciationScore)} />
+                <Text style={styles.feedbackScoreLabel}>Pronunciation</Text>
+              </View>
+              <View style={styles.feedbackScoreItem}>
+                <ScoreRing score={fluencyScore} color={getScoreColor(fluencyScore)} />
+                <Text style={styles.feedbackScoreLabel}>Fluency</Text>
+              </View>
+            </View>
+
+            {/* Waveform indicator */}
+            {(isRecording || isSpeaking) && (
+              <View style={styles.waveformSection}>
+                <AudioWaveform
+                  isActive={isRecording || isSpeaking}
+                  color={isRecording ? colors.error[500] : colors.primary[500]}
+                />
+                <Text style={styles.waveformLabel}>
+                  {isRecording ? 'Listening...' : 'Speaking...'}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -459,7 +798,39 @@ export default function ConversationScreen() {
           scrollViewRef.current?.scrollToEnd({ animated: true })
         }
       >
-        {messages.map(renderMessage)}
+        {messages.map((message) => (
+          <View
+            key={message.id}
+            style={[
+              styles.messageContainer,
+              message.type === 'user' ? styles.userMessageContainer : styles.aiMessageContainer,
+            ]}
+          >
+            <View
+              style={[
+                styles.messageBubble,
+                message.type === 'user' ? styles.userBubble : styles.aiBubble,
+              ]}
+            >
+              <Text style={styles.messageText}>
+                {message.text.split(' ').map((word, index) => {
+                  const cleanWord = word.replace(/[.,!?]/g, '');
+                  const isMispronounced = message.mispronounced?.includes(cleanWord);
+
+                  return (
+                    <Text
+                      key={index}
+                      style={isMispronounced ? styles.mispronounced : undefined}
+                    >
+                      {word}{' '}
+                    </Text>
+                  );
+                })}
+              </Text>
+              <Text style={styles.timestamp}>{message.timestamp}</Text>
+            </View>
+          </View>
+        ))}
         {isLoadingAI && (
           <View style={[styles.messageContainer, styles.aiMessageContainer]}>
             <View style={[styles.messageBubble, styles.aiBubble, styles.loadingBubble]}>
@@ -479,10 +850,7 @@ export default function ConversationScreen() {
           </View>
         ) : (
           <>
-            <Pressable
-              onPress={toggleRecording}
-              disabled={isProcessing}
-            >
+            <Pressable onPress={toggleRecording} disabled={isProcessing}>
               <Animated.View
                 style={[
                   styles.micButton,
@@ -491,9 +859,9 @@ export default function ConversationScreen() {
                 ]}
               >
                 {isRecording ? (
-                  <Square size={32} color={colors.neutral[0]} fill={colors.neutral[0]} strokeWidth={0} />
+                  <Square size={32} color={colors.neutral[50]} fill={colors.neutral[50]} strokeWidth={0} />
                 ) : (
-                  <Mic size={32} color={colors.neutral[0]} strokeWidth={2} />
+                  <Mic size={32} color={colors.neutral[50]} strokeWidth={2} />
                 )}
               </Animated.View>
             </Pressable>
@@ -503,7 +871,7 @@ export default function ConversationScreen() {
             {isSpeaking && (
               <View style={styles.speakingIndicator}>
                 <Volume2 size={14} color={colors.primary[500]} strokeWidth={2} />
-                <Text style={styles.speakingText}>Speaking...</Text>
+                <Text style={styles.speakingText}>AI Speaking...</Text>
               </View>
             )}
           </>
@@ -524,8 +892,258 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: darkTheme.colors.background.primary,
   },
+
+  // Selection Mode Styles
+  selectHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing[4],
+    paddingBottom: spacing[2],
+  },
+  selectTitle: {
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.headlineLarge.fontSize,
+    fontWeight: textStyles.headlineLarge.fontWeight as any,
+  },
+  selectSubtitle: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
+    marginTop: spacing[1],
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.accent[500] + '15',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: layout.radius.full,
+    borderWidth: 1,
+    borderColor: colors.accent[500] + '30',
+  },
+  headerBadgeText: {
+    color: colors.accent[500],
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '600',
+  },
+
+  // Quick Actions
+  quickActionsRow: {
+    paddingHorizontal: layout.screenPadding,
+    marginTop: spacing[4],
+  },
+  quickActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: darkTheme.colors.background.card,
+    borderRadius: layout.radius.lg,
+    padding: spacing[4],
+    borderWidth: 1,
+    borderColor: colors.primary[500] + '30',
+  },
+  quickActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionText: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  quickActionTitle: {
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.bodyMedium.fontSize,
+    fontWeight: '600',
+  },
+  quickActionDesc: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
+    marginTop: spacing[0.5],
+  },
+  newBadge: {
+    backgroundColor: colors.accent[500],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: layout.radius.sm,
+  },
+  newBadgeText: {
+    color: colors.neutral[900],
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  // Exercise List
+  exerciseList: {
+    flex: 1,
+    paddingHorizontal: layout.screenPadding,
+    marginTop: spacing[4],
+  },
+  sectionLabel: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing[3],
+  },
+  exerciseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: darkTheme.colors.background.card,
+    borderRadius: layout.radius.lg,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+    borderWidth: 1,
+    borderColor: darkTheme.colors.border.default,
+  },
+  exerciseIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseContent: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  exerciseTitle: {
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.bodyMedium.fontSize,
+    fontWeight: '600',
+  },
+  exerciseDesc: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
+    marginTop: spacing[0.5],
+    marginBottom: spacing[2],
+  },
+  exerciseMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  difficultyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: layout.radius.sm,
+  },
+  difficultyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  difficultyText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  durationText: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
+  },
+
+  // Search Bar
+  searchContainer: {
+    paddingHorizontal: layout.screenPadding,
+    marginTop: spacing[3],
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: darkTheme.colors.background.card,
+    borderRadius: layout.radius.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    gap: spacing[3],
+    borderWidth: 1,
+    borderColor: darkTheme.colors.border.default,
+  },
+  searchInput: {
+    flex: 1,
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.bodyMedium.fontSize,
+    padding: 0,
+  },
+
+  // Filter Chips
+  filterChipsContainer: {
+    marginTop: spacing[3],
+  },
+  filterChipsContent: {
+    paddingHorizontal: layout.screenPadding,
+    gap: spacing[2],
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1.5],
+    borderRadius: layout.radius.full,
+    backgroundColor: darkTheme.colors.background.card,
+    borderWidth: 1,
+    borderColor: darkTheme.colors.border.default,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
+  },
+  filterChipText: {
+    color: darkTheme.colors.text.secondary,
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: colors.neutral[0],
+  },
+
+  // Section Label Row
+  sectionLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing[3],
+  },
+  sectionCount: {
+    color: colors.primary[400],
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '500',
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing[12],
+    gap: spacing[3],
+  },
+  emptyStateText: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.bodyMedium.fontSize,
+    textAlign: 'center',
+  },
+  emptyStateAction: {
+    color: colors.primary[400],
+    fontSize: textStyles.bodyMedium.fontSize,
+    fontWeight: '600',
+  },
+
+  // Active Conversation Styles
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -533,32 +1151,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingVertical: spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.default,
+    borderBottomColor: darkTheme.colors.border.default,
   },
   headerLeft: {
     flex: 1,
   },
   scenarioName: {
-    ...textStyles.titleLarge,
-    color: colors.text.primary,
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.titleLarge.fontSize,
+    fontWeight: textStyles.titleLarge.fontWeight as any,
     marginBottom: spacing[1],
   },
   timeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1.5],
+    gap: spacing[1],
   },
   timeText: {
-    ...textStyles.labelMedium,
-    color: colors.primary[500],
+    color: colors.primary[400],
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '600',
   },
   endButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1.5],
+    gap: spacing[1],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    borderRadius: layout.radius.md,
+    borderRadius: layout.radius.lg,
     borderWidth: 1,
     borderColor: colors.error[500],
   },
@@ -566,16 +1186,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.error[500] + '15',
   },
   endButtonText: {
-    ...textStyles.labelMedium,
     color: colors.error[500],
+    fontSize: textStyles.caption.fontSize,
+    fontWeight: '600',
   },
+
+  // Feedback Panel
   feedbackPanel: {
-    backgroundColor: colors.background.card,
+    backgroundColor: darkTheme.colors.background.card,
     marginHorizontal: layout.screenPadding,
     marginVertical: spacing[3],
     borderRadius: layout.radius.lg,
     overflow: 'hidden',
-    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: darkTheme.colors.border.default,
   },
   feedbackHeader: {
     flexDirection: 'row',
@@ -584,41 +1208,57 @@ const styles = StyleSheet.create({
     padding: spacing[4],
   },
   feedbackTitle: {
-    ...textStyles.titleMedium,
-    color: colors.text.primary,
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.bodyMedium.fontSize,
+    fontWeight: '600',
   },
   feedbackContent: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[4],
-    gap: spacing[4],
   },
-  gaugeContainer: {
+  feedbackScores: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  feedbackScoreItem: {
+    alignItems: 'center',
     gap: spacing[2],
   },
-  gaugeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  feedbackScoreLabel: {
+    color: darkTheme.colors.text.tertiary,
+    fontSize: textStyles.caption.fontSize,
   },
-  gaugeLabel: {
-    ...textStyles.labelSmall,
-    color: colors.text.secondary,
-  },
-  gaugeBar: {
-    height: 6,
-    backgroundColor: colors.neutral[800],
-    borderRadius: layout.radius.full,
-    overflow: 'hidden',
-    flexDirection: 'row',
-  },
-  gaugeFill: {
-    height: 6,
-    borderRadius: layout.radius.full,
-  },
-  gaugeScore: {
-    ...textStyles.labelMedium,
+  scoreRingValue: {
+    position: 'absolute',
+    fontSize: 12,
     fontWeight: '700',
   },
+
+  // Waveform
+  waveformSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing[4],
+    gap: spacing[3],
+  },
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 32,
+    gap: 3,
+  },
+  waveformBar: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+  },
+  waveformLabel: {
+    color: darkTheme.colors.text.secondary,
+    fontSize: textStyles.caption.fontSize,
+  },
+
+  // Transcript
   transcriptWindow: {
     flex: 1,
     paddingHorizontal: layout.screenPadding,
@@ -646,7 +1286,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: spacing[1],
   },
   aiBubble: {
-    backgroundColor: colors.neutral[800],
+    backgroundColor: darkTheme.colors.background.elevated,
     borderBottomLeftRadius: spacing[1],
   },
   loadingBubble: {
@@ -656,12 +1296,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
   },
   loadingText: {
-    ...textStyles.bodySmall,
-    color: colors.text.secondary,
+    color: darkTheme.colors.text.secondary,
+    fontSize: textStyles.bodySmall.fontSize,
   },
   messageText: {
-    ...textStyles.bodyMedium,
-    color: colors.text.primary,
+    color: darkTheme.colors.text.primary,
+    fontSize: textStyles.bodyMedium.fontSize,
   },
   mispronounced: {
     textDecorationLine: 'underline',
@@ -670,31 +1310,38 @@ const styles = StyleSheet.create({
     color: colors.error[300],
   },
   timestamp: {
-    ...textStyles.caption,
-    color: colors.text.tertiary,
+    color: darkTheme.colors.text.tertiary,
+    fontSize: 10,
     marginTop: spacing[1],
   },
+
+  // Microphone
   micContainer: {
     alignItems: 'center',
     paddingVertical: spacing[5],
     paddingBottom: spacing[8],
-    backgroundColor: colors.background.primary,
+    backgroundColor: darkTheme.colors.background.primary,
   },
   micButton: {
     width: 80,
     height: 80,
-    borderRadius: layout.radius.full,
+    borderRadius: 40,
     backgroundColor: colors.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
-    ...shadows.lg,
+    shadowColor: colors.primary[500],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   micButtonRecording: {
     backgroundColor: colors.error[500],
+    shadowColor: colors.error[500],
   },
   micHint: {
-    ...textStyles.labelMedium,
-    color: colors.text.secondary,
+    color: darkTheme.colors.text.secondary,
+    fontSize: textStyles.bodySmall.fontSize,
     marginTop: spacing[3],
   },
   speakingIndicator: {
@@ -704,12 +1351,12 @@ const styles = StyleSheet.create({
     marginTop: spacing[2],
   },
   speakingText: {
-    ...textStyles.caption,
     color: colors.primary[500],
+    fontSize: textStyles.caption.fontSize,
   },
   permissionWarning: {
-    ...textStyles.caption,
     color: colors.error[500],
+    fontSize: textStyles.caption.fontSize,
     marginTop: spacing[2],
   },
   processingContainer: {
@@ -718,62 +1365,22 @@ const styles = StyleSheet.create({
     height: 120,
   },
   processingText: {
-    ...textStyles.labelMedium,
-    color: colors.text.secondary,
+    color: darkTheme.colors.text.secondary,
+    fontSize: textStyles.bodySmall.fontSize,
     marginTop: spacing[3],
   },
   errorContainer: {
     backgroundColor: colors.error[500] + '15',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    borderRadius: layout.radius.md,
+    borderRadius: layout.radius.lg,
     marginTop: spacing[2],
     borderWidth: 1,
     borderColor: colors.error[500],
   },
   errorText: {
-    ...textStyles.caption,
     color: colors.error[500],
+    fontSize: textStyles.caption.fontSize,
     textAlign: 'center',
-  },
-  // Realtime Banner
-  realtimeBanner: {
-    backgroundColor: colors.primary[500] + '15',
-    marginHorizontal: layout.screenPadding,
-    marginVertical: spacing[2],
-    padding: spacing[3],
-    borderRadius: layout.radius.lg,
-    borderWidth: 1,
-    borderColor: colors.primary[500] + '30',
-  },
-  realtimeBannerPressed: {
-    backgroundColor: colors.primary[500] + '25',
-  },
-  realtimeBannerContent: {
-    alignItems: 'center',
-  },
-  realtimeBadge: {
-    backgroundColor: colors.accent[500],
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[0.5],
-    borderRadius: layout.radius.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    marginBottom: spacing[1.5],
-  },
-  realtimeBadgeText: {
-    ...textStyles.labelSmall,
-    color: colors.neutral[0],
-    fontWeight: '700',
-  },
-  realtimeBannerTitle: {
-    ...textStyles.labelLarge,
-    color: colors.primary[400],
-    marginBottom: spacing[0.5],
-  },
-  realtimeBannerDesc: {
-    ...textStyles.caption,
-    color: colors.text.secondary,
   },
 });

@@ -5,19 +5,26 @@ import { AuthProvider } from '../context/auth';
 import { LearningProvider } from '../src/context/LearningContext';
 import { VocabularyProvider } from '../src/context/VocabularyContext';
 import { GamificationProvider } from '../src/context/GamificationContext';
+import { RecommendationProvider, AccessibilityProvider, SRSProvider } from '../src/contexts';
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <GamificationProvider>
-          <LearningProvider>
-            <VocabularyProvider>
-              <StatusBar style="light" />
-              <Slot />
-            </VocabularyProvider>
-          </LearningProvider>
-        </GamificationProvider>
+        <AccessibilityProvider>
+          <GamificationProvider>
+            <RecommendationProvider>
+              <SRSProvider>
+                <LearningProvider>
+                  <VocabularyProvider>
+                    <StatusBar style="light" />
+                    <Slot />
+                  </VocabularyProvider>
+                </LearningProvider>
+              </SRSProvider>
+            </RecommendationProvider>
+          </GamificationProvider>
+        </AccessibilityProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
