@@ -1080,21 +1080,25 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
-  // Filter Chips
+  // Filter Chips - Compact horizontal style
   filterChipsContainer: {
     marginTop: spacing[3],
+    maxHeight: 40,
   },
   filterChipsContent: {
     paddingHorizontal: layout.screenPadding,
     gap: spacing[2],
+    alignItems: 'center',
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing[1],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1.5],
-    borderRadius: layout.radius.full,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: darkTheme.colors.background.card,
     borderWidth: 1,
     borderColor: darkTheme.colors.border.default,
@@ -1105,7 +1109,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     color: darkTheme.colors.text.secondary,
-    fontSize: textStyles.caption.fontSize,
+    fontSize: 12,
     fontWeight: '600',
   },
   filterChipTextActive: {
