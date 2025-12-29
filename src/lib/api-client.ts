@@ -926,6 +926,26 @@ class ApiClient {
   }
 
   /**
+   * Get today's goal with actual progress
+   */
+  async getTodayGoal(): Promise<{
+    goal_id: string;
+    goal_date: string;
+    target_study_minutes: number;
+    target_lessons: number;
+    target_reviews: number;
+    target_drills: number;
+    actual_study_minutes: number;
+    actual_lessons: number;
+    actual_reviews: number;
+    actual_drills: number;
+    completed: boolean;
+    completion_percentage: number;
+  }> {
+    return this.request('/api/goals/today');
+  }
+
+  /**
    * Record XP earned from activity
    */
   async recordXP(data: {

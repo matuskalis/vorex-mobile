@@ -8,7 +8,8 @@ import { ProblemWordsSummary } from '../../src/components/ProblemWordsSummary';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { Target, Play, Clock, ChevronRight, Flame, Sparkles, Trophy, Mic2 } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows, darkTheme } from '../../src/theme';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { apiClient } from '../../src/lib/api-client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -294,6 +295,27 @@ export default function HomeScreen() {
   const { getTopProblemWords } = usePractice();
   const router = useRouter();
 
+  // Backend-synced daily progress
+  const [todayMinutes, setTodayMinutes] = useState(0);
+  const [goalMinutes, setGoalMinutes] = useState(state.dailyGoalMinutes || 15);
+
+  // Fetch today's goal from backend
+  const fetchTodayGoal = useCallback(async () => {
+    try {
+      const goal = await apiClient.getTodayGoal();
+      setTodayMinutes(goal.actual_study_minutes || 0);
+      setGoalMinutes(goal.target_study_minutes || 15);
+    } catch (err) {
+      // Fall back to local state
+      setTodayMinutes(state.todayStats.speakingMinutes);
+      setGoalMinutes(state.dailyGoalMinutes || 15);
+    }
+  }, [state.todayStats.speakingMinutes, state.dailyGoalMinutes]);
+
+  useEffect(() => {
+    fetchTodayGoal();
+  }, [fetchTodayGoal]);
+
   // Get problem words for display
   const problemWords = getTopProblemWords(5);
 
@@ -333,8 +355,8 @@ export default function HomeScreen() {
     );
   }
 
-  const dailyProgress = state.dailyGoalMinutes > 0
-    ? Math.min(state.todayStats.speakingMinutes / state.dailyGoalMinutes, 1)
+  const dailyProgress = goalMinutes > 0
+    ? Math.min(todayMinutes / goalMinutes, 1)
     : 0;
 
   // Calculate XP progress to next level
@@ -366,8 +388,8 @@ export default function HomeScreen() {
           <Text style={styles.heroSubtitle}>
             {getMotivationalMessage(
               currentStreak,
-              state.todayStats.speakingMinutes,
-              state.dailyGoalMinutes
+              todayMinutes,
+              goalMinutes
             )}
           </Text>
 
@@ -376,8 +398,8 @@ export default function HomeScreen() {
             <UnifiedHeroRing
               timeProgress={dailyProgress}
               xpProgress={xpProgress}
-              todayMinutes={state.todayStats.speakingMinutes}
-              goalMinutes={state.dailyGoalMinutes}
+              todayMinutes={todayMinutes}
+              goalMinutes={goalMinutes}
               streak={currentStreak}
               level={currentLevel}
               currentXP={xpInCurrentLevel}
@@ -416,7 +438,7 @@ export default function HomeScreen() {
                   <>
                     <Play size={20} color={colors.neutral[0]} strokeWidth={2} fill={colors.neutral[0]} />
                     <Text style={styles.continueButtonText}>
-                      {state.todayStats.speakingMinutes > 0 ? 'Continue' : 'Start Learning'}
+                      {todayMinutes > 0 ? 'Continue' : 'Start Learning'}
                     </Text>
                   </>
                 )}
