@@ -38,25 +38,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} strokeWidth={2} />,
         }}
       />
-      {/* Hidden tabs - kept for backwards compatibility but not shown in tab bar */}
-      <Tabs.Screen
-        name="conversation"
-        options={{
-          href: null, // Hide from tab bar
-        }}
-      />
-      <Tabs.Screen
-        name="review"
-        options={{
-          href: null, // Hide from tab bar
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          href: null, // Hide from tab bar
-        }}
-      />
     </Tabs>
   );
 }

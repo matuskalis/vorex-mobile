@@ -318,7 +318,7 @@ export default function SessionSummaryScreen() {
         <View style={styles.footerActions}>
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => router.replace('/(tabs)/conversation')}
+            onPress={() => router.replace('/(tabs)/practice')}
             activeOpacity={0.85}
           >
             <RotateCcw size={18} color={colors.primary[400]} strokeWidth={2.5} />

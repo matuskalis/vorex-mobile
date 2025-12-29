@@ -28,8 +28,8 @@ export interface SessionResult {
   date: string;
   speakingMinutes: number;
   wordsSpoken: number;
-  pronunciationScore: number;
-  fluencyScore: number;
+  pronunciationScore: number | null;
+  fluencyScore: number | null;
   thingsDoneWell: string[];
   areasToImprove: string[];
   vocabularyLearned: string[];

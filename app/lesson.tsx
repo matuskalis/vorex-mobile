@@ -21,9 +21,9 @@ const LESSON_STEPS = [
     prompt: "The weather is nice today. I think I'll go to the coffee shop and get a latte with extra foam.",
   },
   {
-    type: 'conversation',
-    title: 'Conversation Practice',
-    scenario: 'Coffee Shop Order',
+    type: 'practice',
+    title: 'Speaking Practice',
+    scenario: 'Self-Assessment Drills',
   },
   {
     type: 'drills',
@@ -343,22 +343,22 @@ export default function LessonScreen() {
           </View>
         )}
 
-        {/* Conversation Step */}
-        {step.type === 'conversation' && (
+        {/* Practice Step */}
+        {step.type === 'practice' && (
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>{step.title}</Text>
             <Text style={styles.scenarioName}>{step.scenario}</Text>
             <View style={styles.scenarioCard}>
-              <Text style={styles.scenarioIcon}>☕</Text>
+              <Text style={styles.scenarioIcon}>🎯</Text>
               <Text style={styles.scenarioDescription}>
-                Practice ordering drinks and food at a coffee shop. The AI barista will guide you through a realistic conversation.
+                Practice phrases with self-assessment. Listen, record, and rate your pronunciation.
               </Text>
             </View>
             <TouchableOpacity
               style={styles.startConversationButton}
-              onPress={() => router.push('/(tabs)/conversation')}
+              onPress={() => router.push('/(tabs)/practice')}
             >
-              <Text style={styles.startConversationText}>Start Conversation</Text>
+              <Text style={styles.startConversationText}>Start Practice</Text>
             </TouchableOpacity>
           </View>
         )}

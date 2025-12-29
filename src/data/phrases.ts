@@ -168,6 +168,98 @@ export const PRACTICE_PHRASES: Phrase[] = [
     difficulty: 2,
   },
 
+  // Emergency Situations
+  {
+    id: 'gen_emerg_1',
+    text: "I need to see a doctor. Is there a hospital nearby?",
+    category: 'general',
+    subcategory: 'emergency',
+    difficulty: 2,
+  },
+  {
+    id: 'gen_emerg_2',
+    text: "I've lost my wallet. Can you help me?",
+    category: 'general',
+    subcategory: 'emergency',
+    difficulty: 2,
+  },
+  {
+    id: 'gen_emerg_3',
+    text: "Could you please call an ambulance?",
+    category: 'general',
+    subcategory: 'emergency',
+    difficulty: 2,
+  },
+
+  // Hotel Check-in/out
+  {
+    id: 'gen_hotel_1',
+    text: "I have a reservation under the name Smith.",
+    category: 'general',
+    subcategory: 'hotel',
+    difficulty: 1,
+  },
+  {
+    id: 'gen_hotel_2',
+    text: "What time is checkout? Can I get a late checkout?",
+    category: 'general',
+    subcategory: 'hotel',
+    difficulty: 2,
+  },
+  {
+    id: 'gen_hotel_3',
+    text: "Could you store my luggage until my flight?",
+    category: 'general',
+    subcategory: 'hotel',
+    difficulty: 2,
+  },
+
+  // Social Invitations
+  {
+    id: 'gen_social_1',
+    text: "Would you like to grab a coffee sometime?",
+    category: 'general',
+    subcategory: 'social',
+    difficulty: 1,
+  },
+  {
+    id: 'gen_social_2',
+    text: "I'm having a small get-together this weekend. You should come!",
+    category: 'general',
+    subcategory: 'social',
+    difficulty: 2,
+  },
+  {
+    id: 'gen_social_3',
+    text: "That sounds great! I'd love to join you.",
+    category: 'general',
+    subcategory: 'social',
+    difficulty: 1,
+  },
+
+  // Weather Small Talk
+  {
+    id: 'gen_weather_1',
+    text: "Beautiful day today, isn't it?",
+    category: 'general',
+    subcategory: 'weather',
+    difficulty: 1,
+  },
+  {
+    id: 'gen_weather_2',
+    text: "I heard it's supposed to rain later this week.",
+    category: 'general',
+    subcategory: 'weather',
+    difficulty: 2,
+  },
+  {
+    id: 'gen_weather_3',
+    text: "This weather is perfect for a walk in the park.",
+    category: 'general',
+    subcategory: 'weather',
+    difficulty: 2,
+  },
+
   // ========== BUSINESS PHRASES ==========
 
   // Cold Calling
@@ -282,6 +374,105 @@ export const PRACTICE_PHRASES: Phrase[] = [
     text: "Are there any questions before I move to the next slide?",
     category: 'business',
     subcategory: 'presentations',
+    difficulty: 2,
+  },
+
+  // Email Follow-ups
+  {
+    id: 'biz_email_1',
+    text: "I'm following up on my previous email. Have you had a chance to review it?",
+    category: 'business',
+    subcategory: 'email_followup',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_email_2',
+    text: "Just wanted to circle back and see if you have any questions.",
+    category: 'business',
+    subcategory: 'email_followup',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_email_3',
+    text: "I'll send you a summary of our discussion via email.",
+    category: 'business',
+    subcategory: 'email_followup',
+    difficulty: 2,
+  },
+
+  // Negotiation
+  {
+    id: 'biz_nego_1',
+    text: "We're flexible on the pricing if you can commit to a longer term.",
+    category: 'business',
+    subcategory: 'negotiation',
+    difficulty: 3,
+  },
+  {
+    id: 'biz_nego_2',
+    text: "What would it take to close this deal today?",
+    category: 'business',
+    subcategory: 'negotiation',
+    difficulty: 3,
+  },
+  {
+    id: 'biz_nego_3',
+    text: "I understand your budget constraints. Let's find a solution that works.",
+    category: 'business',
+    subcategory: 'negotiation',
+    difficulty: 3,
+  },
+
+  // Networking Events
+  {
+    id: 'biz_network_1',
+    text: "Hi, I don't think we've met. I'm from. What brings you here?",
+    category: 'business',
+    subcategory: 'networking',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_network_2',
+    text: "It was great meeting you. Let's connect on LinkedIn.",
+    category: 'business',
+    subcategory: 'networking',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_network_3',
+    text: "I'd love to hear more about your work. Can I get your card?",
+    category: 'business',
+    subcategory: 'networking',
+    difficulty: 2,
+  },
+
+  // Interview Questions
+  {
+    id: 'biz_interview_1',
+    text: "Can you tell me about yourself and your background?",
+    category: 'business',
+    subcategory: 'interview',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_interview_2',
+    text: "What interests you about this position and our company?",
+    category: 'business',
+    subcategory: 'interview',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_interview_3',
+    text: "Where do you see yourself in five years?",
+    category: 'business',
+    subcategory: 'interview',
+    difficulty: 2,
+  },
+  {
+    id: 'biz_interview_4',
+    text: "Do you have any questions for me about the role?",
+    category: 'business',
+    subcategory: 'interview',
     difficulty: 2,
   },
 ];
