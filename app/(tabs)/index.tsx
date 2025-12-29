@@ -1,20 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Animated, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Animated, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import { useLearning } from '../../src/context/LearningContext';
-import { useVocabulary } from '../../src/context/VocabularyContext';
 import { useGamification } from '../../src/context/GamificationContext';
 import { usePractice } from '../../src/context/PracticeContext';
-import { useRecommendations, useSRSDueCount } from '../../src/contexts';
 import { ProblemWordsSummary } from '../../src/components/ProblemWordsSummary';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop, G } from 'react-native-svg';
-import { Target, Play, TrendingUp, Clock, ChevronRight, Brain, Flame, Sparkles, Trophy, RefreshCw, GraduationCap, MessageSquare, BookOpen, Mic2 } from 'lucide-react-native';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import { Target, Play, Clock, ChevronRight, Flame, Sparkles, Trophy, Mic2 } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows, darkTheme } from '../../src/theme';
 import { useEffect, useRef } from 'react';
-import { LessonRecommendation } from '../../src/lib/api-client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1'] as const;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -292,191 +288,10 @@ function StreakFlame({ streak, size = 24 }: { streak: number; size?: number }) {
   );
 }
 
-// Animated Play Button with pulse effect
-function AnimatedPlayButton({ goalComplete }: { goalComplete: boolean }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    // Subtle pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Glow animation for goal complete state
-    if (goalComplete) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 0.6, duration: 800, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-        ])
-      ).start();
-    }
-  }, [goalComplete]);
-
-  return (
-    <Animated.View style={[
-      styles.playButtonOuter,
-      { transform: [{ scale: pulseAnim }] }
-    ]}>
-      {goalComplete && (
-        <Animated.View style={[styles.playButtonGlow, { opacity: glowAnim }]} />
-      )}
-      <View style={[
-        styles.playButton,
-        goalComplete && styles.playButtonComplete
-      ]}>
-        <Play
-          size={32}
-          color={goalComplete ? colors.success[600] : colors.primary[600]}
-          strokeWidth={2}
-          fill={goalComplete ? colors.success[600] : colors.primary[600]}
-        />
-      </View>
-    </Animated.View>
-  );
-}
-
-// Get icon for recommendation type
-function getRecommendationIcon(type: string) {
-  switch (type) {
-    case 'lesson': return GraduationCap;
-    case 'practice': return MessageSquare;
-    case 'review': return RefreshCw;
-    default: return BookOpen;
-  }
-}
-
-// Get color for difficulty
-function getDifficultyColor(difficulty: string) {
-  switch (difficulty) {
-    case 'easy': return colors.success[500];
-    case 'medium': return colors.accent[500];
-    case 'hard': return colors.error[500];
-    default: return colors.primary[500];
-  }
-}
-
-// Recommendation Card Component
-function RecommendationCard({
-  recommendation,
-  index,
-  onPress,
-}: {
-  recommendation: LessonRecommendation;
-  index: number;
-  onPress: () => void;
-}) {
-  const Icon = getRecommendationIcon(recommendation.type);
-  const difficultyColor = getDifficultyColor(recommendation.difficulty);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      <Pressable
-        style={({ pressed }) => [styles.recommendationCard, pressed && styles.cardPressed]}
-        onPress={onPress}
-      >
-        <View style={[styles.recommendationIconContainer, { backgroundColor: difficultyColor + '15' }]}>
-          <Icon size={22} color={difficultyColor} strokeWidth={2} />
-        </View>
-        <View style={styles.recommendationContent}>
-          <View style={styles.recommendationHeader}>
-            <Text style={styles.recommendationTitle} numberOfLines={1}>
-              {recommendation.title}
-            </Text>
-            {recommendation.priority === 1 && (
-              <View style={styles.topPickBadge}>
-                <Sparkles size={10} color={colors.accent[400]} strokeWidth={2} />
-                <Text style={styles.topPickText}>Top Pick</Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.recommendationReason} numberOfLines={2}>
-            {recommendation.reason}
-          </Text>
-          <View style={styles.recommendationMeta}>
-            <View style={[styles.difficultyBadge, { backgroundColor: difficultyColor + '20' }]}>
-              <Text style={[styles.difficultyText, { color: difficultyColor }]}>
-                {recommendation.difficulty}
-              </Text>
-            </View>
-            <View style={styles.recommendationTime}>
-              <Clock size={12} color={colors.neutral[500]} strokeWidth={2} />
-              <Text style={styles.recommendationTimeText}>{recommendation.estimated_minutes} min</Text>
-            </View>
-          </View>
-        </View>
-        <ChevronRight size={18} color={colors.neutral[600]} strokeWidth={2} />
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-// SRS Review Banner Component
-function SRSReviewBanner({ dueCount, onPress }: { dueCount: number; onPress: () => void }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (dueCount > 0) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.02, duration: 1000, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ])
-      ).start();
-    }
-  }, [dueCount]);
-
-  if (dueCount === 0) return null;
-
-  return (
-    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-      <Pressable style={({ pressed }) => [styles.srsReviewBanner, pressed && styles.cardPressed]} onPress={onPress}>
-        <View style={styles.srsReviewIcon}>
-          <RefreshCw size={20} color={colors.success[400]} strokeWidth={2} />
-        </View>
-        <View style={styles.srsReviewContent}>
-          <Text style={styles.srsReviewTitle}>Spaced Repetition Review</Text>
-          <Text style={styles.srsReviewSubtitle}>
-            {dueCount} {dueCount === 1 ? 'card' : 'cards'} ready for review
-          </Text>
-        </View>
-        <View style={styles.srsReviewBadge}>
-          <Text style={styles.srsReviewBadgeText}>{dueCount}</Text>
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
 export default function HomeScreen() {
   const { state } = useLearning();
-  const { getDueTodayWords, getStats } = useVocabulary();
   const { state: gamificationState } = useGamification();
-  const { getTopProblemWords, state: practiceState } = usePractice();
-  const { recommendations, srsDueCount, isLoading: recommendationsLoading, refresh: refreshRecommendations } = useRecommendations();
+  const { getTopProblemWords } = usePractice();
   const router = useRouter();
 
   // Get problem words for display
@@ -518,14 +333,16 @@ export default function HomeScreen() {
     );
   }
 
-  const currentLevelIndex = CEFR_LEVELS.indexOf(state.cefrLevel || 'A1');
   const dailyProgress = state.dailyGoalMinutes > 0
     ? Math.min(state.todayStats.speakingMinutes / state.dailyGoalMinutes, 1)
     : 0;
-  const xpProgress = gamificationState.currentXP / gamificationState.xpToNextLevel;
 
-  const vocabStats = getStats();
-  const dueWords = getDueTodayWords();
+  // Calculate XP progress to next level
+  const currentLevel = gamificationState.level || 1;
+  const xpForNextLevel = (currentLevel + 1) * 100;
+  const xpInCurrentLevel = gamificationState.xp - (currentLevel * 100);
+  const xpProgress = xpInCurrentLevel / 100; // Each level is 100 XP
+  const currentStreak = gamificationState.streak?.currentStreak || 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -548,7 +365,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>{getGreeting()}</Text>
           <Text style={styles.heroSubtitle}>
             {getMotivationalMessage(
-              gamificationState.streakDays || 0,
+              currentStreak,
               state.todayStats.speakingMinutes,
               state.dailyGoalMinutes
             )}
@@ -561,10 +378,10 @@ export default function HomeScreen() {
               xpProgress={xpProgress}
               todayMinutes={state.todayStats.speakingMinutes}
               goalMinutes={state.dailyGoalMinutes}
-              streak={gamificationState.streakDays || 0}
-              level={gamificationState.level || 1}
-              currentXP={gamificationState.currentXP || 0}
-              xpToNext={gamificationState.xpToNextLevel || 100}
+              streak={currentStreak}
+              level={currentLevel}
+              currentXP={xpInCurrentLevel}
+              xpToNext={100}
               goalComplete={dailyProgress >= 1}
             />
 
@@ -576,7 +393,7 @@ export default function HomeScreen() {
               </View>
               <View style={styles.ringLegendItem}>
                 <View style={[styles.ringLegendDot, { backgroundColor: colors.accent[400] }]} />
-                <Text style={styles.ringLegendText}>XP to level {(gamificationState.level || 1) + 1}</Text>
+                <Text style={styles.ringLegendText}>XP to level {currentLevel + 1}</Text>
               </View>
             </View>
           </View>
@@ -616,16 +433,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* SRS Review Banner */}
-        {srsDueCount > 0 && (
-          <View style={styles.srsSection}>
-            <SRSReviewBanner
-              dueCount={srsDueCount}
-              onPress={() => router.push('/review' as any)}
-            />
-          </View>
-        )}
-
         {/* Problem Words Section */}
         {problemWords.length > 0 && (
           <View style={styles.srsSection}>
@@ -635,144 +442,6 @@ export default function HomeScreen() {
             />
           </View>
         )}
-
-        {/* Recommended for You Section */}
-        {recommendations.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionTitleContainer}>
-                <Sparkles size={16} color={colors.primary[500]} strokeWidth={2} />
-                <Text style={styles.sectionTitle}>Recommended for You</Text>
-              </View>
-              {recommendationsLoading && (
-                <ActivityIndicator size="small" color={colors.primary[500]} />
-              )}
-            </View>
-            <View style={styles.recommendationsContainer}>
-              {recommendations.slice(0, 3).map((rec, index) => (
-                <RecommendationCard
-                  key={rec.scenario_id || rec.lesson_id || index}
-                  recommendation={rec}
-                  index={index}
-                  onPress={() => {
-                    if (rec.type === 'practice' && rec.scenario_id) {
-                      router.push(`/conversation?scenarioId=${rec.scenario_id}` as any);
-                    } else if (rec.type === 'lesson' && rec.lesson_id) {
-                      router.push(`/lesson?lessonId=${rec.lesson_id}` as any);
-                    } else if (rec.type === 'review') {
-                      router.push('/review' as any);
-                    }
-                  }}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Vocabulary Review Alert */}
-        {dueWords.length > 0 && (
-          <Link href="/vocabulary-review" asChild>
-            <Pressable style={({ pressed }) => [styles.vocabAlert, pressed && styles.cardPressed]}>
-              <View style={styles.vocabAlertIcon}>
-                <Brain size={20} color={colors.info[400]} strokeWidth={2} />
-              </View>
-              <View style={styles.vocabAlertContent}>
-                <Text style={styles.vocabAlertTitle}>Vocabulary Review</Text>
-                <Text style={styles.vocabAlertSubtitle}>
-                  {dueWords.length} {dueWords.length === 1 ? 'word' : 'words'} ready to practice
-                </Text>
-              </View>
-              <View style={styles.vocabAlertBadge}>
-                <Text style={styles.vocabAlertBadgeText}>{dueWords.length}</Text>
-              </View>
-            </Pressable>
-          </Link>
-        )}
-
-        {/* Progress Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>This Week</Text>
-            <TrendingUp size={16} color={colors.primary[500]} strokeWidth={2} />
-          </View>
-          <View style={styles.progressCard}>
-            <View style={styles.progressStats}>
-              <View style={styles.progressStatItem}>
-                <ProgressRing
-                  progress={state.weeklyStats.fluencyScore / 100}
-                  size={72}
-                  strokeWidth={6}
-                  gradientColors={[colors.primary[400], colors.primary[500]]}
-                >
-                  <Text style={styles.miniRingValue}>{state.weeklyStats.fluencyScore}%</Text>
-                </ProgressRing>
-                <Text style={styles.progressStatLabel}>Fluency</Text>
-              </View>
-              <View style={styles.progressStatItem}>
-                <ProgressRing
-                  progress={state.weeklyStats.pronunciationScore / 100}
-                  size={72}
-                  strokeWidth={6}
-                  gradientColors={[colors.success[400], colors.success[500]]}
-                >
-                  <Text style={styles.miniRingValue}>{state.weeklyStats.pronunciationScore}%</Text>
-                </ProgressRing>
-                <Text style={styles.progressStatLabel}>Pronunciation</Text>
-              </View>
-              <View style={styles.progressStatItem}>
-                <ProgressRing
-                  progress={state.weeklyStats.grammarScore / 100}
-                  size={72}
-                  strokeWidth={6}
-                  gradientColors={[colors.accent[400], colors.accent[500]]}
-                >
-                  <Text style={styles.miniRingValue}>{state.weeklyStats.grammarScore}%</Text>
-                </ProgressRing>
-                <Text style={styles.progressStatLabel}>Grammar</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Level Journey */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Journey</Text>
-          <View style={styles.journeyCard}>
-            <View style={styles.journeyLevels}>
-              {CEFR_LEVELS.map((level, index) => (
-                <View key={level} style={styles.journeyLevelItem}>
-                  <View style={[
-                    styles.journeyDot,
-                    index < currentLevelIndex && styles.journeyDotCompleted,
-                    index === currentLevelIndex && styles.journeyDotCurrent,
-                  ]}>
-                    {index < currentLevelIndex && (
-                      <View style={styles.journeyDotInner} />
-                    )}
-                    {index === currentLevelIndex && (
-                      <View style={styles.journeyDotPulse} />
-                    )}
-                  </View>
-                  <Text style={[
-                    styles.journeyLevelText,
-                    index <= currentLevelIndex && styles.journeyLevelTextActive,
-                  ]}>
-                    {level}
-                  </Text>
-                  {index < CEFR_LEVELS.length - 1 && (
-                    <View style={[
-                      styles.journeyLine,
-                      index < currentLevelIndex && styles.journeyLineCompleted,
-                    ]} />
-                  )}
-                </View>
-              ))}
-            </View>
-            <Text style={styles.journeyProgress}>
-              Keep practicing to reach {CEFR_LEVELS[currentLevelIndex + 1] || 'fluency'}!
-            </Text>
-          </View>
-        </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
