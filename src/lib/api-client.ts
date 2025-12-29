@@ -831,6 +831,14 @@ class ApiClient {
   async getRecommendations(): Promise<{
     recommendations: LessonRecommendation[];
     reasoning: string;
+    weak_skills?: Array<{
+      skill_key: string;
+      name: string;
+      domain: string;
+      level: string;
+      p_learned: number;
+    }>;
+    srs_due_count?: number;
   }> {
     return this.request('/api/recommendations');
   }

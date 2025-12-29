@@ -77,7 +77,9 @@ export const lightTheme = {
   },
 };
 
-export type ThemeType = typeof darkTheme;
+export type DarkThemeType = typeof darkTheme;
+export type LightThemeType = typeof lightTheme;
+export type ThemeType = DarkThemeType | LightThemeType;
 export type ThemeName = 'light' | 'dark';
 
 // Default theme
