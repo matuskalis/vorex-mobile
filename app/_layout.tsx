@@ -5,6 +5,7 @@ import { AuthProvider } from '../context/auth';
 import { LearningProvider } from '../src/context/LearningContext';
 import { VocabularyProvider } from '../src/context/VocabularyContext';
 import { GamificationProvider } from '../src/context/GamificationContext';
+import { PracticeProvider } from '../src/context/PracticeContext';
 import { RecommendationProvider, AccessibilityProvider, SRSProvider } from '../src/contexts';
 
 export default function RootLayout() {
@@ -17,8 +18,10 @@ export default function RootLayout() {
               <SRSProvider>
                 <LearningProvider>
                   <VocabularyProvider>
-                    <StatusBar style="light" />
-                    <Slot />
+                    <PracticeProvider>
+                      <StatusBar style="light" />
+                      <Slot />
+                    </PracticeProvider>
                   </VocabularyProvider>
                 </LearningProvider>
               </SRSProvider>

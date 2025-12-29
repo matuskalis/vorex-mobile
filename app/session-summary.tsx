@@ -18,14 +18,16 @@ import {
   Award,
   ChevronRight,
   Sparkles,
+  RotateCcw,
+  Share2,
 } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows } from '../src/theme';
 
 interface SessionStats {
   speakingMinutes: number;
   wordsSpoken: number;
-  pronunciationScore: number;
-  fluencyScore: number;
+  pronunciationScore: number | null;  // null = no valid score
+  fluencyScore: number | null;        // null = no valid score
   thingsDoneWell: string[];
   areasToImprove: string[];
   vocabularyLearned: string[];
@@ -35,12 +37,12 @@ export default function SessionSummaryScreen() {
   const { addSpeakingTime, updateScores, saveSessionResult } = useLearning();
   const params = useLocalSearchParams();
 
-  // Parse session stats from params or use defaults
+  // Parse session stats from params - NO DEFAULTS for scores (must be real)
   const sessionStats: SessionStats = {
-    speakingMinutes: Number(params.speakingMinutes) || 5,
-    wordsSpoken: Number(params.wordsSpoken) || 150,
-    pronunciationScore: Number(params.pronunciationScore) || 75,
-    fluencyScore: Number(params.fluencyScore) || 80,
+    speakingMinutes: Number(params.speakingMinutes) || 0,
+    wordsSpoken: Number(params.wordsSpoken) || 0,
+    pronunciationScore: params.pronunciationScore ? Number(params.pronunciationScore) : null,
+    fluencyScore: params.fluencyScore ? Number(params.fluencyScore) : null,
     thingsDoneWell: params.thingsDoneWell
       ? JSON.parse(params.thingsDoneWell as string)
       : ['Clear pronunciation', 'Natural pacing', 'Good vocabulary usage'],
@@ -56,9 +58,12 @@ export default function SessionSummaryScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
+  // Check if we have valid scores
+  const hasValidScores = sessionStats.pronunciationScore !== null && sessionStats.fluencyScore !== null;
+
   useEffect(() => {
-    // Celebration animation for good sessions
-    if (sessionStats.pronunciationScore >= 70 && sessionStats.fluencyScore >= 70) {
+    // Celebration animation for good sessions - only if scores are valid
+    if (hasValidScores && sessionStats.pronunciationScore! >= 70 && sessionStats.fluencyScore! >= 70) {
       Animated.spring(scaleAnim, {
         toValue: 1,
         tension: 50,
@@ -85,10 +90,13 @@ export default function SessionSummaryScreen() {
   const handleContinue = async () => {
     // Save session data to learning context
     addSpeakingTime(sessionStats.speakingMinutes);
-    updateScores({
-      pronunciation: sessionStats.pronunciationScore,
-      fluency: sessionStats.fluencyScore,
-    });
+    // Only update scores if they are valid (not null)
+    if (hasValidScores) {
+      updateScores({
+        pronunciation: sessionStats.pronunciationScore!,
+        fluency: sessionStats.fluencyScore!,
+      });
+    }
 
     // Save session result for warm-up generation
     const sessionResult = {
@@ -110,19 +118,28 @@ export default function SessionSummaryScreen() {
     router.replace('/(tabs)');
   };
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return colors.neutral[400]; // Gray for N/A
     if (score >= 80) return colors.success[500];
     if (score >= 60) return colors.warning[500];
     return colors.error[500];
   };
 
-  const getScoreEmoji = (score: number) => {
+  // Format score for display
+  const formatScore = (score: number | null) => {
+    return score !== null ? `${score}%` : 'N/A';
+  };
+
+  const getScoreEmoji = (score: number | null) => {
+    if (score === null) return '❓';
     if (score >= 80) return '🌟';
     if (score >= 60) return '👍';
     return '💪';
   };
 
-  const isGoodSession = sessionStats.pronunciationScore >= 70 && sessionStats.fluencyScore >= 70;
+  const isGoodSession = hasValidScores &&
+    sessionStats.pronunciationScore! >= 70 &&
+    sessionStats.fluencyScore! >= 70;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -197,7 +214,7 @@ export default function SessionSummaryScreen() {
                 <View>
                   <Text style={styles.scoreLabel}>Pronunciation</Text>
                   <Text style={[styles.scoreValue, { color: getScoreColor(sessionStats.pronunciationScore) }]}>
-                    {sessionStats.pronunciationScore}%
+                    {formatScore(sessionStats.pronunciationScore)}
                   </Text>
                 </View>
               </View>
@@ -207,7 +224,7 @@ export default function SessionSummaryScreen() {
                 style={[
                   styles.scoreBarFill,
                   {
-                    flex: sessionStats.pronunciationScore / 100,
+                    flex: (sessionStats.pronunciationScore ?? 0) / 100,
                     backgroundColor: getScoreColor(sessionStats.pronunciationScore),
                   },
                 ]}
@@ -222,7 +239,7 @@ export default function SessionSummaryScreen() {
                 <View>
                   <Text style={styles.scoreLabel}>Fluency</Text>
                   <Text style={[styles.scoreValue, { color: getScoreColor(sessionStats.fluencyScore) }]}>
-                    {sessionStats.fluencyScore}%
+                    {formatScore(sessionStats.fluencyScore)}
                   </Text>
                 </View>
               </View>
@@ -232,7 +249,7 @@ export default function SessionSummaryScreen() {
                 style={[
                   styles.scoreBarFill,
                   {
-                    flex: sessionStats.fluencyScore / 100,
+                    flex: (sessionStats.fluencyScore ?? 0) / 100,
                     backgroundColor: getScoreColor(sessionStats.fluencyScore),
                   },
                 ]}
@@ -296,8 +313,18 @@ export default function SessionSummaryScreen() {
         </View>
       </ScrollView>
 
-      {/* Continue Button */}
+      {/* Action Buttons */}
       <View style={styles.footer}>
+        <View style={styles.footerActions}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => router.replace('/(tabs)/conversation')}
+            activeOpacity={0.85}
+          >
+            <RotateCcw size={18} color={colors.primary[400]} strokeWidth={2.5} />
+            <Text style={styles.secondaryButtonText}>Practice Again</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           style={styles.continueButton}
           onPress={handleContinue}
@@ -513,5 +540,26 @@ const styles = StyleSheet.create({
   continueButtonText: {
     ...textStyles.labelLarge,
     color: colors.neutral[0],
+  },
+  footerActions: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginBottom: spacing[3],
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+    borderRadius: layout.radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary[500],
+    backgroundColor: 'transparent',
+  },
+  secondaryButtonText: {
+    ...textStyles.labelMedium,
+    color: colors.primary[400],
   },
 });

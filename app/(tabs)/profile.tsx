@@ -28,6 +28,8 @@ import {
 import { useAuth } from '../../context/auth';
 import { useLearning } from '../../src/context/LearningContext';
 import { useGamification } from '../../src/context/GamificationContext';
+import { usePractice } from '../../src/context/PracticeContext';
+import { BusinessModeToggle } from '../../src/components/BusinessModeToggle';
 import { useSRSStats, useAccessibility, TextSizeScale } from '../../src/contexts';
 import { darkTheme, colors, spacing, layout, textStyles } from '../../src/theme';
 import { apiClient, SessionStats, SkillProfile } from '../../src/lib/api-client';
@@ -160,6 +162,7 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { state } = useLearning();
   const { state: gamificationState } = useGamification();
+  const { state: practiceState, toggleBusinessMode } = usePractice();
   const { xp, level, streak } = gamificationState;
   const srsStats = useSRSStats();
   const { settings: accessibilitySettings, updateSettings: updateAccessibility } = useAccessibility();
@@ -457,6 +460,18 @@ export default function ProfileScreen() {
               color={getScoreColor(sessionStats?.average_fluency ?? state.weeklyStats.fluencyScore)}
             />
           </View>
+        </View>
+
+        {/* Practice Mode */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Settings size={18} color={colors.primary[400]} strokeWidth={2.5} />
+            <Text style={styles.sectionTitle}>Practice Mode</Text>
+          </View>
+          <BusinessModeToggle
+            enabled={practiceState.businessModeEnabled}
+            onToggle={toggleBusinessMode}
+          />
         </View>
 
         {/* Settings Menu */}

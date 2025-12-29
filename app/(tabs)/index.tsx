@@ -4,9 +4,11 @@ import { Link, useRouter } from 'expo-router';
 import { useLearning } from '../../src/context/LearningContext';
 import { useVocabulary } from '../../src/context/VocabularyContext';
 import { useGamification } from '../../src/context/GamificationContext';
+import { usePractice } from '../../src/context/PracticeContext';
 import { useRecommendations, useSRSDueCount } from '../../src/contexts';
+import { ProblemWordsSummary } from '../../src/components/ProblemWordsSummary';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop, G } from 'react-native-svg';
-import { Target, Play, TrendingUp, Clock, ChevronRight, Brain, Flame, Sparkles, Trophy, RefreshCw, GraduationCap, MessageSquare, BookOpen } from 'lucide-react-native';
+import { Target, Play, TrendingUp, Clock, ChevronRight, Brain, Flame, Sparkles, Trophy, RefreshCw, GraduationCap, MessageSquare, BookOpen, Mic2 } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows, darkTheme } from '../../src/theme';
 import { useEffect, useRef } from 'react';
 import { LessonRecommendation } from '../../src/lib/api-client';
@@ -473,8 +475,12 @@ export default function HomeScreen() {
   const { state } = useLearning();
   const { getDueTodayWords, getStats } = useVocabulary();
   const { state: gamificationState } = useGamification();
+  const { getTopProblemWords, state: practiceState } = usePractice();
   const { recommendations, srsDueCount, isLoading: recommendationsLoading, refresh: refreshRecommendations } = useRecommendations();
   const router = useRouter();
+
+  // Get problem words for display
+  const problemWords = getTopProblemWords(5);
 
   // Placement test CTA
   if (!state.hasCompletedPlacement) {
@@ -576,7 +582,8 @@ export default function HomeScreen() {
           </View>
 
           {/* Continue Button - directly below ring */}
-          <Link href="/lesson" asChild>
+          {/* Routes to Practice tab for self-assessment flow */}
+          <Link href="/(tabs)/practice" asChild>
             <Pressable style={({ pressed }) => [
               styles.continueButton,
               pressed && styles.continueButtonPressed,
@@ -615,6 +622,16 @@ export default function HomeScreen() {
             <SRSReviewBanner
               dueCount={srsDueCount}
               onPress={() => router.push('/review' as any)}
+            />
+          </View>
+        )}
+
+        {/* Problem Words Section */}
+        {problemWords.length > 0 && (
+          <View style={styles.srsSection}>
+            <ProblemWordsSummary
+              problemWords={problemWords}
+              onPracticePress={() => router.push('/(tabs)/practice' as any)}
             />
           </View>
         )}

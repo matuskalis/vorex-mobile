@@ -1,26 +1,42 @@
 # Vorex Mobile
 
-AI-powered English language learning mobile application built with React Native and Expo.
+English pronunciation practice app with self-assessment. Built with React Native and Expo.
 
 ## Features
 
-- **AI Conversation Practice** - Real-time voice conversations with AI tutor
-- **Speech Recognition** - OpenAI Whisper for accurate transcription
-- **Text-to-Speech** - Natural AI voice responses using OpenAI TTS
-- **Pronunciation Feedback** - Detailed analysis of your speaking
-- **Placement Test** - Initial assessment to determine proficiency level
-- **Structured Lessons** - Progressive learning path
-- **Progress Tracking** - Analytics dashboard showing improvement
+- **Self-Assessment Practice** - Listen, record, compare, and rate your pronunciation
+- **Swipeable Phrase Cards** - Tinder-style card interface for practicing phrases
+- **Problem Word Tracking** - Tap words you struggled with; the app tracks patterns
+- **OpenAI TTS** - High-quality text-to-speech for native pronunciation examples
+- **Business Mode** - Toggle to practice professional/business English phrases
+- **Progress Tracking** - Session history and problem word analytics
+
+## How It Works
+
+```
+See Phrase → Listen (TTS) → Record → Playback → Self-Assess → Mark Problems
+                                                    ↓              ↓
+                                            "Good" / "Retry"   Tap words
+```
+
+## App Structure
+
+| Tab | Purpose |
+|-----|---------|
+| **Home** | Daily practice prompt, problem words summary, streak |
+| **Practice** | Swipeable phrase cards with self-assessment |
+| **Profile** | Settings, Business Mode toggle |
 
 ## Tech Stack
 
 - **Framework**: React Native with Expo SDK 54
 - **Router**: Expo Router (file-based routing)
-- **UI**: Custom design system with Lucide icons
-- **Audio**: expo-av for recording
+- **UI**: Custom dark theme design system with Lucide icons
+- **Audio**: expo-av for recording and playback
+- **TTS**: OpenAI TTS via backend API
 - **Auth**: Supabase
 - **Backend**: FastAPI (Python) on Railway
-- **AI**: OpenAI GPT-4, Whisper, TTS
+- **State**: React Context with useReducer, AsyncStorage persistence
 
 ## Getting Started
 
@@ -63,29 +79,27 @@ npx expo start
 ```
 vorex-mobile/
 ├── app/                    # Expo Router pages
-│   ├── (tabs)/            # Tab navigation screens
-│   │   ├── index.tsx      # Home - daily goals, quick actions
-│   │   ├── conversation.tsx # AI conversation practice
-│   │   ├── review.tsx     # Review past conversations
-│   │   ├── progress.tsx   # Analytics dashboard
-│   │   └── profile.tsx    # User settings
-│   ├── lesson.tsx         # Structured lesson flow
+│   ├── (tabs)/            # Tab navigation (3 tabs)
+│   │   ├── index.tsx      # Home - practice CTA, problem words
+│   │   ├── practice.tsx   # Swipeable phrase cards
+│   │   └── profile.tsx    # Settings, business mode toggle
+│   ├── warm-up.tsx        # Quick warm-up exercises
 │   ├── placement-test.tsx # Proficiency assessment
 │   ├── login.tsx          # Authentication
 │   └── signup.tsx         # Registration
 ├── src/
-│   ├── components/        # Reusable UI components
-│   │   ├── Button.tsx     # Primary button component
-│   │   └── Card.tsx       # Card container component
+│   ├── components/        # UI components
+│   │   ├── SwipeablePhraseCard.tsx  # Main practice card
+│   │   ├── SelfAssessmentButtons.tsx # Good/Retry buttons
+│   │   ├── ProblemWordChip.tsx      # Tappable word chip
+│   │   ├── ProblemWordsSummary.tsx  # Home section
+│   │   └── BusinessModeToggle.tsx   # Settings toggle
 │   ├── context/           # React Context providers
-│   ├── hooks/             # Custom React hooks
+│   │   └── PracticeContext.tsx # Practice state management
+│   ├── data/              # Static content
+│   │   └── phrases.ts     # Practice phrases (general + business)
 │   ├── lib/               # API clients, utilities
-│   ├── theme/             # Design system
-│   │   ├── colors.ts      # Color palette
-│   │   ├── spacing.ts     # Spacing & layout tokens
-│   │   ├── typography.ts  # Font styles
-│   │   └── shadows.ts     # Elevation system
-│   └── types/             # TypeScript definitions
+│   └── theme/             # Design system (dark theme)
 └── assets/                # Images, icons, fonts
 ```
 

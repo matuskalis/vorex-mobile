@@ -48,6 +48,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Practice exercise types
 type ExerciseType = 'conversation' | 'vocabulary' | 'pronunciation';
 
+// Category types for filtering
+type CategoryFilter = 'All' | 'Daily Life' | 'Business' | 'Travel';
+const CATEGORY_FILTERS: CategoryFilter[] = ['All', 'Daily Life', 'Business', 'Travel'];
+
 type Exercise = {
   id: string;
   type: ExerciseType;
@@ -57,6 +61,7 @@ type Exercise = {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   duration: string;
   color: string;
+  category: 'Daily Life' | 'Business' | 'Travel';
 };
 
 const PRACTICE_EXERCISES: Exercise[] = [
@@ -69,6 +74,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Easy',
     duration: '5-10 min',
     color: colors.primary[500],
+    category: 'Daily Life',
   },
   {
     id: 'restaurant',
@@ -79,6 +85,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Medium',
     duration: '8-12 min',
     color: colors.accent[500],
+    category: 'Daily Life',
   },
   {
     id: 'airport',
@@ -89,6 +96,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Medium',
     duration: '10-15 min',
     color: colors.info[500],
+    category: 'Travel',
   },
   {
     id: 'shopping',
@@ -99,6 +107,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Easy',
     duration: '5-8 min',
     color: colors.success[500],
+    category: 'Daily Life',
   },
   {
     id: 'job_interview',
@@ -109,6 +118,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Hard',
     duration: '15-20 min',
     color: colors.warning[500],
+    category: 'Business',
   },
   {
     id: 'phone_call',
@@ -119,6 +129,7 @@ const PRACTICE_EXERCISES: Exercise[] = [
     difficulty: 'Medium',
     duration: '5-10 min',
     color: colors.error[500],
+    category: 'Business',
   },
 ];
 
@@ -257,7 +268,12 @@ export default function ConversationScreen() {
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('All');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('All');
   const [isSavingSession, setIsSavingSession] = useState(false);
+
+  // Track words spoken during session for vocabulary
+  const [wordsSpoken, setWordsSpoken] = useState(0);
+  const [mispronounced, setMispronounced] = useState<string[]>([]);
 
   // Filtered exercises
   const filteredExercises = useMemo(() => {
@@ -270,9 +286,18 @@ export default function ConversationScreen() {
       // Difficulty filter
       const matchesDifficulty = difficultyFilter === 'All' || exercise.difficulty === difficultyFilter;
 
-      return matchesSearch && matchesDifficulty;
+      // Category filter
+      const matchesCategory = categoryFilter === 'All' || exercise.category === categoryFilter;
+
+      return matchesSearch && matchesDifficulty && matchesCategory;
     });
-  }, [searchQuery, difficultyFilter]);
+  }, [searchQuery, difficultyFilter, categoryFilter]);
+
+  // Get category count
+  const getCategoryCount = (category: CategoryFilter): number => {
+    if (category === 'All') return PRACTICE_EXERCISES.length;
+    return PRACTICE_EXERCISES.filter(e => e.category === category).length;
+  };
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -343,19 +368,21 @@ export default function ConversationScreen() {
     setSessionTime(0);
     setPronunciationScore(0);
     setFluencyScore(0);
+    setWordsSpoken(0);
+    setMispronounced([]);
     setMode('active');
   };
 
   const getInitialMessage = (scenarioId: string): string => {
     const messages: Record<string, string> = {
-      coffee_shop: "Hello! Welcome to the coffee shop. What can I get for you today?",
-      restaurant: "Good evening! Welcome to La Bella Italia. Do you have a reservation?",
-      airport: "Next in line please. May I see your passport and boarding pass?",
-      shopping: "Hi there! Welcome to the store. Are you looking for anything in particular?",
-      job_interview: "Please, have a seat. Thank you for coming in today. Tell me about yourself.",
-      phone_call: "Hello, thank you for calling. How may I help you today?",
+      coffee_shop: "Hey there! I'm Maya, your barista today. Welcome to The Daily Grind! What can I get started for you? We've got some amazing seasonal specials if you're feeling adventurous!",
+      restaurant: "Good evening! I'm Marco, and I'll be taking care of you tonight at La Bella Italia. Do you have a reservation with us? Either way, we'll find you a lovely table!",
+      airport: "Good morning! I'm Sarah from Skyline Airlines. May I please see your passport and boarding pass? I'll get you all checked in and on your way!",
+      shopping: "Hi! I'm Jordan, one of the sales associates here. Welcome to Urban Style! Are you looking for something specific today, or just browsing? I'm happy to help either way!",
+      job_interview: "Hello, nice to meet you! I'm David Chen, the hiring manager. Please, have a seat and make yourself comfortable. Thank you for coming in today. So, tell me a bit about yourself!",
+      phone_call: "Good afternoon, this is Dr. Williams' office, Emma speaking. How may I help you today?",
     };
-    return messages[scenarioId] || "Hello! How can I help you today?";
+    return messages[scenarioId] || "Hello! I'm Alex, and I'm here to help you practice. How can I assist you today?";
   };
 
   const speakMessage = async (text: string) => {
@@ -453,6 +480,15 @@ export default function ConversationScreen() {
 
       const userText = result.transcript || '[No speech detected]';
 
+      // Track words spoken and mispronounced
+      if (userText && userText !== '[No speech detected]') {
+        const wordCount = userText.split(/\s+/).filter(w => w.length > 0).length;
+        setWordsSpoken(prev => prev + wordCount);
+        if (result.mispronounced_words.length > 0) {
+          setMispronounced(prev => [...new Set([...prev, ...result.mispronounced_words])]);
+        }
+      }
+
       const newUserMessage: Message = {
         id: messages.length + 1,
         type: 'user',
@@ -546,6 +582,42 @@ export default function ConversationScreen() {
           style: 'destructive',
           onPress: async () => {
             await saveSessionToBackend();
+
+            // Navigate to session-summary with real stats
+            const speakingMinutes = Math.round(sessionTime / 60);
+            const thingsDoneWell = [];
+            const areasToImprove = [];
+
+            if (pronunciationScore >= 70) thingsDoneWell.push('Clear pronunciation');
+            if (fluencyScore >= 70) thingsDoneWell.push('Natural pacing');
+            if (turnNumber >= 3) thingsDoneWell.push('Active conversation');
+            if (mispronounced.length === 0) thingsDoneWell.push('No mispronunciations');
+
+            if (pronunciationScore < 70) areasToImprove.push('Practice pronunciation clarity');
+            if (fluencyScore < 70) areasToImprove.push('Work on speaking fluency');
+            if (mispronounced.length > 0) {
+              areasToImprove.push(`Practice words: ${mispronounced.slice(0, 3).join(', ')}`);
+            }
+
+            // Default feedback if empty
+            if (thingsDoneWell.length === 0) thingsDoneWell.push('Great effort!');
+            if (areasToImprove.length === 0) areasToImprove.push('Keep practicing daily');
+
+            router.push({
+              pathname: '/session-summary',
+              params: {
+                speakingMinutes: Math.max(1, speakingMinutes).toString(),
+                wordsSpoken: wordsSpoken.toString(),
+                pronunciationScore: pronunciationScore.toString(),
+                fluencyScore: fluencyScore.toString(),
+                thingsDoneWell: JSON.stringify(thingsDoneWell),
+                areasToImprove: JSON.stringify(areasToImprove),
+                vocabularyLearned: JSON.stringify([]),
+                scenarioId: selectedExercise?.id || 'unknown',
+              },
+            });
+
+            // Reset state for next session
             setMode('select');
             setSelectedExercise(null);
             setMessages([]);
@@ -554,6 +626,8 @@ export default function ConversationScreen() {
             setTurnNumber(0);
             setPronunciationScore(0);
             setFluencyScore(0);
+            setWordsSpoken(0);
+            setMispronounced([]);
           },
         },
       ]
@@ -614,11 +688,43 @@ export default function ConversationScreen() {
           </View>
         </View>
 
-        {/* Difficulty Filter Chips */}
+        {/* Category Filter Chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterChipsContainer}
+          contentContainerStyle={styles.filterChipsContent}
+        >
+          {CATEGORY_FILTERS.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.filterChip,
+                categoryFilter === category && styles.filterChipActive,
+              ]}
+              onPress={() => setCategoryFilter(category)}
+              activeOpacity={0.7}
+            >
+              {categoryFilter === category && (
+                <Check size={12} color={colors.neutral[0]} strokeWidth={3} />
+              )}
+              <Text
+                style={[
+                  styles.filterChipText,
+                  categoryFilter === category && styles.filterChipTextActive,
+                ]}
+              >
+                {category} ({getCategoryCount(category)})
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Difficulty Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.filterChipsContainer, { marginTop: spacing[2] }]}
           contentContainerStyle={styles.filterChipsContent}
         >
           {DIFFICULTY_FILTERS.map((difficulty) => (

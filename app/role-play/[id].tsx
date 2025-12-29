@@ -29,6 +29,7 @@ import {
 import { colors, spacing, layout, textStyles, shadows } from '../../src/theme';
 import { useRealtimeVoice, useRolePlayMemory } from '../../src/hooks';
 import { getScenarioById } from '../../src/data/rolePlayScenarios';
+import { FEATURES } from '../../src/config/features';
 
 type Message = {
   id: string;
@@ -58,6 +59,31 @@ export default function RolePlayConversationScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Scenario not found</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Feature flag: Realtime voice AI is temporarily disabled
+  if (!FEATURES.REALTIME_VOICE_AI) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <WifiOff size={48} color={colors.text.secondary} strokeWidth={1.5} />
+          <Text style={[styles.errorText, { marginTop: spacing[4] }]}>
+            Role-Play Temporarily Unavailable
+          </Text>
+          <Text style={styles.disabledMessage}>
+            Real-time voice conversations are being improved.{'\n'}
+            Please use Pronunciation Drill for now.
+          </Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -735,5 +761,14 @@ const styles = StyleSheet.create({
   backButtonText: {
     ...textStyles.labelLarge,
     color: colors.neutral[0],
+  },
+  disabledMessage: {
+    ...textStyles.bodyMedium,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing[2],
+    marginBottom: spacing[6],
+    lineHeight: 22,
+    paddingHorizontal: spacing[4],
   },
 });

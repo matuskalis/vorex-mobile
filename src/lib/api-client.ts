@@ -3,6 +3,29 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const API_BASE_URL = 'https://speaksharp-core-production.up.railway.app';
 
+// Audio validation constants
+const MIN_AUDIO_DURATION_SECONDS = 1.5;
+const MIN_AUDIO_SIZE_BYTES = 5000; // ~5KB minimum for valid audio
+
+/**
+ * Validate audio file before upload.
+ * Throws descriptive error if validation fails.
+ */
+async function validateAudioFile(audioUri: string): Promise<{ size: number }> {
+  // Check file exists and get info
+  const fileInfo = await FileSystem.getInfoAsync(audioUri);
+
+  if (!fileInfo.exists) {
+    throw new Error('Audio file does not exist');
+  }
+
+  if (!fileInfo.size || fileInfo.size < MIN_AUDIO_SIZE_BYTES) {
+    throw new Error(`Audio file too small (${fileInfo.size || 0} bytes). Minimum: ${MIN_AUDIO_SIZE_BYTES} bytes. Please record for at least 1.5 seconds.`);
+  }
+
+  return { size: fileInfo.size };
+}
+
 class ApiClient {
   private async getAuthToken(): Promise<string | null> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -142,18 +165,33 @@ class ApiClient {
     error?: string;
   }> {
     try {
+      // Validate audio before upload
+      await validateAudioFile(audioUri);
+
       const token = await this.getAuthToken();
 
-      // Read the audio file and convert to base64
-      const response = await fetch(audioUri);
-      const blob = await response.blob();
-
       // Create FormData for multipart upload
+      // Detect audio format from file extension
+      // iOS expo-av records in CAF format, which OpenAI doesn't support
+      const extension = audioUri.split('.').pop()?.toLowerCase() || 'wav';
+      let mimeType = 'audio/wav';
+      let fileName = 'recording.wav';
+      if (extension === 'caf') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'm4a') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'mp3') {
+        mimeType = 'audio/mpeg';
+        fileName = 'recording.mp3';
+      }
+
       const formData = new FormData();
       formData.append('audio', {
         uri: audioUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
+        type: mimeType,
+        name: fileName,
       } as any);
 
       const apiResponse = await fetch(`${API_BASE_URL}/api/speech/transcribe`, {
@@ -312,13 +350,32 @@ class ApiClient {
     error?: string;
   }> {
     try {
+      // Validate audio before upload
+      await validateAudioFile(audioUri);
+
       const token = await this.getAuthToken();
+
+      // Detect audio format from file extension
+      // iOS expo-av records in CAF format, which OpenAI doesn't support
+      const extension = audioUri.split('.').pop()?.toLowerCase() || 'wav';
+      let mimeType = 'audio/wav';
+      let fileName = 'recording.wav';
+      if (extension === 'caf') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'm4a') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'mp3') {
+        mimeType = 'audio/mpeg';
+        fileName = 'recording.mp3';
+      }
 
       const formData = new FormData();
       formData.append('audio', {
         uri: audioUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
+        type: mimeType,
+        name: fileName,
       } as any);
 
       if (expectedText) {
@@ -369,6 +426,110 @@ class ApiClient {
   }
 
   /**
+   * CANONICAL WARMUP EVALUATION
+   * Single source of truth for warm-up speech analysis.
+   * Uses acoustic validity gate BEFORE ASR.
+   *
+   * Returns exactly one of two shapes:
+   * A) Invalid: { valid: false, reason: string, debug: {...} }
+   * B) Valid: { valid: true, transcript: string, fluency: number, debug: {...} }
+   *
+   * NO pronunciation score for warm-up (no target text).
+   */
+  async evaluateWarmup(audioUri: string): Promise<{
+    valid: boolean;
+    reason?: string;
+    transcript?: string;
+    fluency?: number;
+    debug: {
+      file_size: number;
+      duration_ms: number;
+      rms: number;
+      peak: number;
+      voiced_ms: number;
+      sample_rate: number;
+      transcript?: string;
+      word_count?: number;
+      error?: string;
+    };
+  }> {
+    console.log('[CANONICAL] evaluateWarmup called');
+
+    try {
+      // Validate audio before upload
+      await validateAudioFile(audioUri);
+
+      const token = await this.getAuthToken();
+
+      // Detect audio format from file extension
+      const extension = audioUri.split('.').pop()?.toLowerCase() || 'wav';
+      let mimeType = 'audio/wav';
+      let fileName = 'recording.wav';
+      if (extension === 'caf') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'm4a') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'mp3') {
+        mimeType = 'audio/mpeg';
+        fileName = 'recording.mp3';
+      }
+
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: audioUri,
+        type: mimeType,
+        name: fileName,
+      } as any);
+
+      const apiResponse = await fetch(`${API_BASE_URL}/api/warmup/evaluate`, {
+        method: 'POST',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: formData,
+      });
+
+      if (!apiResponse.ok) {
+        const error = await apiResponse.json().catch(() => ({ detail: 'Warmup evaluation failed' }));
+        return {
+          valid: false,
+          reason: 'invalid_capture',
+          debug: {
+            file_size: 0,
+            duration_ms: 0,
+            rms: 0,
+            peak: 0,
+            voiced_ms: 0,
+            sample_rate: 0,
+            error: error.detail || `HTTP ${apiResponse.status}`,
+          },
+        };
+      }
+
+      const result = await apiResponse.json();
+      console.log('[CANONICAL] Backend response:', result);
+      return result;
+    } catch (error) {
+      console.error('[CANONICAL] evaluateWarmup error:', error);
+      return {
+        valid: false,
+        reason: 'invalid_capture',
+        debug: {
+          file_size: 0,
+          duration_ms: 0,
+          rms: 0,
+          peak: 0,
+          voiced_ms: 0,
+          sample_rate: 0,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      };
+    }
+  }
+
+  /**
    * Analyze pronunciation with phoneme-level feedback
    * TODO: Backend endpoint needs to be implemented at /api/speech/analyze-pronunciation
    * For now, this will fall back to the standard speech analysis
@@ -396,13 +557,32 @@ class ApiClient {
     error?: string;
   }> {
     try {
+      // Validate audio before upload
+      await validateAudioFile(audioUri);
+
       const token = await this.getAuthToken();
+
+      // Detect audio format from file extension
+      // iOS expo-av records in CAF format, which OpenAI doesn't support
+      const extension = audioUri.split('.').pop()?.toLowerCase() || 'wav';
+      let mimeType = 'audio/wav';
+      let fileName = 'recording.wav';
+      if (extension === 'caf') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'm4a') {
+        mimeType = 'audio/m4a';
+        fileName = 'recording.m4a';
+      } else if (extension === 'mp3') {
+        mimeType = 'audio/mpeg';
+        fileName = 'recording.mp3';
+      }
 
       const formData = new FormData();
       formData.append('audio', {
         uri: audioUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
+        type: mimeType,
+        name: fileName,
       } as any);
       formData.append('expected_text', expectedText);
 

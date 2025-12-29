@@ -50,10 +50,15 @@ export default function LessonScreen() {
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [warmupFeedback, setWarmupFeedback] = useState<WarmupFeedback | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [sessionStats, setSessionStats] = useState({
-    pronunciationScore: 0,
-    fluencyScore: 0,
-    grammarScore: 0,
+  const [sessionStats, setSessionStats] = useState<{
+    pronunciationScore: number | null;
+    fluencyScore: number | null;
+    grammarScore: number | null;
+    speakingMinutes: number;
+  }>({
+    pronunciationScore: null,  // null = no valid score computed
+    fluencyScore: null,        // null = no valid score computed
+    grammarScore: null,
     speakingMinutes: 0,
   });
 
@@ -191,7 +196,8 @@ export default function LessonScreen() {
       // Update learning context with session stats
       const sessionMinutes = Math.ceil((Date.now() - sessionStartRef.current) / 60000);
       addSpeakingTime(sessionMinutes);
-      if (sessionStats.pronunciationScore > 0) {
+      // Only update scores if they are valid (not null)
+      if (sessionStats.pronunciationScore !== null && sessionStats.fluencyScore !== null) {
         updateScores({
           pronunciation: sessionStats.pronunciationScore,
           fluency: sessionStats.fluencyScore,
@@ -210,10 +216,15 @@ export default function LessonScreen() {
     }
   };
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return '#9ca3af'; // Gray for N/A
     if (score >= 80) return '#10b981';
     if (score >= 60) return '#f59e0b';
     return '#ef4444';
+  };
+
+  const formatScore = (score: number | null) => {
+    return score !== null ? `${score}%` : 'N/A';
   };
 
   return (
@@ -386,20 +397,20 @@ export default function LessonScreen() {
             </Text>
             <View style={styles.summaryStats}>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: getScoreColor(sessionStats.pronunciationScore || 78) }]}>
-                  {sessionStats.pronunciationScore || 78}%
+                <Text style={[styles.statValue, { color: getScoreColor(sessionStats.pronunciationScore) }]}>
+                  {formatScore(sessionStats.pronunciationScore)}
                 </Text>
                 <Text style={styles.statLabel}>Pronunciation</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: getScoreColor(sessionStats.fluencyScore || 85) }]}>
-                  {sessionStats.fluencyScore || 85}%
+                <Text style={[styles.statValue, { color: getScoreColor(sessionStats.fluencyScore) }]}>
+                  {formatScore(sessionStats.fluencyScore)}
                 </Text>
                 <Text style={styles.statLabel}>Fluency</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: getScoreColor(72) }]}>
-                  72%
+                <Text style={[styles.statValue, { color: getScoreColor(sessionStats.grammarScore) }]}>
+                  {formatScore(sessionStats.grammarScore)}
                 </Text>
                 <Text style={styles.statLabel}>Grammar</Text>
               </View>

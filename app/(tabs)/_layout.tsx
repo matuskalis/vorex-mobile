@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
-import { Home, MessageCircle, BookOpen, BarChart3, User } from 'lucide-react-native';
+import { Home, Mic, User } from 'lucide-react-native';
 import { colors, layout } from '../../src/theme';
 
 const ICON_SIZE = 24;
@@ -25,24 +25,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="conversation"
+        name="practice"
         options={{
           title: 'Practice',
-          tabBarIcon: ({ color }) => <MessageCircle size={ICON_SIZE} color={color} strokeWidth={2} />,
-        }}
-      />
-      <Tabs.Screen
-        name="review"
-        options={{
-          title: 'Review',
-          tabBarIcon: ({ color }) => <BookOpen size={ICON_SIZE} color={color} strokeWidth={2} />,
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color }) => <BarChart3 size={ICON_SIZE} color={color} strokeWidth={2} />,
+          tabBarIcon: ({ color }) => <Mic size={ICON_SIZE} color={color} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen
@@ -50,6 +36,25 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} strokeWidth={2} />,
+        }}
+      />
+      {/* Hidden tabs - kept for backwards compatibility but not shown in tab bar */}
+      <Tabs.Screen
+        name="conversation"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="review"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="progress"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>
