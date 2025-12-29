@@ -845,6 +845,43 @@ class ApiClient {
   }
 
   // ============================================
+  // Self-Assessment Practice Endpoints
+  // ============================================
+
+  /**
+   * Record a practice attempt with self-assessment
+   */
+  async recordPracticeAttempt(data: {
+    phrase_id: string;
+    self_rating: 'good' | 'retry';
+    attempt_count: number;
+    problem_words: string[];
+  }): Promise<{
+    success: boolean;
+    phrase_id: string;
+    self_rating: string;
+    problem_words_recorded: number;
+  }> {
+    return this.request('/api/practice/attempt', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Get user's problem words (most struggled with)
+   */
+  async getProblemWords(): Promise<{
+    problem_words: Array<{
+      word: string;
+      occurrences: number;
+      last_seen: string | null;
+    }>;
+  }> {
+    return this.request('/api/practice/problem-words');
+  }
+
+  // ============================================
   // Skills Endpoints
   // ============================================
 

@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     alignItems: 'center',
     paddingHorizontal: spacing[4],
-    paddingBottom: 120, // Extra padding for tab bar + safe area
+    paddingBottom: 180, // Extra padding for tab bar + safe area
   },
   phraseCard: {
     backgroundColor: colors.background.card,

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Phrase, getRandomPhrases } from '../data/phrases';
+import { apiClient } from '../lib/api-client';
 
 // Types
 export interface ProblemWord {
@@ -292,7 +293,20 @@ export function PracticeProvider({ children }: { children: ReactNode }) {
   }
 
   function recordAttempt(phraseId: string, phraseText: string, selfRating: 'good' | 'retry', problemWords: string[]) {
+    // Update local state
     dispatch({ type: 'RECORD_ATTEMPT', payload: { phraseId, phraseText, selfRating, problemWords } });
+
+    // Sync to backend (fire and forget - don't block UI)
+    const existingAttempt = state.currentSession?.attempts.find(a => a.phraseId === phraseId);
+    apiClient.recordPracticeAttempt({
+      phrase_id: phraseId,
+      self_rating: selfRating,
+      attempt_count: existingAttempt ? existingAttempt.attemptCount + 1 : 1,
+      problem_words: problemWords,
+    }).catch(err => {
+      console.log('Failed to sync practice attempt:', err);
+      // Don't throw - tracking is optional
+    });
   }
 
   function nextPhrase() {
