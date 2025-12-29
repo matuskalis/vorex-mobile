@@ -313,8 +313,45 @@ export function PracticeProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEXT_PHRASE' });
   }
 
-  function completeSession() {
+  async function completeSession() {
+    // Get session stats before completing
+    const session = state.currentSession;
+    const phrasesCompleted = session?.attempts.length || 0;
+    const goodAttempts = session?.attempts.filter(a => a.selfRating === 'good').length || 0;
+
+    // Complete locally first
     dispatch({ type: 'COMPLETE_SESSION' });
+
+    // Sync to backend (fire and forget - don't block UI)
+    try {
+      // 1. Record activity to update streak
+      apiClient.recordActivity().catch(err => {
+        console.log('Failed to record activity:', err);
+      });
+
+      // 2. Award XP (10 XP per phrase, bonus for good ratings)
+      const baseXP = phrasesCompleted * 10;
+      const bonusXP = goodAttempts * 5; // 5 bonus XP per "good" rating
+      apiClient.recordXP({
+        xp_earned: baseXP,
+        bonus_xp: bonusXP,
+        source: 'practice_session',
+        details: `Completed ${phrasesCompleted} phrases`,
+      }).catch(err => {
+        console.log('Failed to record XP:', err);
+      });
+
+      // 3. Update daily goal progress (estimate ~1 min per phrase)
+      const studyMinutes = Math.max(1, Math.round(phrasesCompleted * 0.5));
+      apiClient.updateGoalProgress({
+        study_minutes: studyMinutes,
+        drills: phrasesCompleted,
+      }).catch(err => {
+        console.log('Failed to update goal progress:', err);
+      });
+    } catch (err) {
+      console.log('Error syncing session:', err);
+    }
   }
 
   function resetSession() {

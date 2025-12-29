@@ -882,6 +882,75 @@ class ApiClient {
   }
 
   // ============================================
+  // Streak & Progress Endpoints
+  // ============================================
+
+  /**
+   * Record activity and update streak.
+   * Call when user completes practice session.
+   */
+  async recordActivity(): Promise<{
+    current_streak: number;
+    longest_streak: number;
+    last_active_date: string;
+    total_days_active: number;
+    freeze_days_available: number;
+  }> {
+    return this.request('/api/streaks/record-activity', {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Update daily goal progress (study minutes, etc.)
+   */
+  async updateGoalProgress(progress: {
+    study_minutes?: number;
+    lessons?: number;
+    reviews?: number;
+    drills?: number;
+  }): Promise<{
+    goal: {
+      user_id: string;
+      date: string;
+      study_minutes: { target: number; progress: number };
+      lessons: { target: number; progress: number };
+      reviews: { target: number; progress: number };
+      drills: { target: number; progress: number };
+    };
+  }> {
+    return this.request('/api/goals/today/progress', {
+      method: 'POST',
+      body: JSON.stringify(progress),
+    });
+  }
+
+  /**
+   * Record XP earned from activity
+   */
+  async recordXP(data: {
+    xp_earned: number;
+    bonus_xp?: number;
+    source: string;
+    details?: string;
+  }): Promise<{
+    xp_added: number;
+    total_xp: number;
+    level: number;
+    level_progress: number;
+  }> {
+    return this.request('/api/xp/record', {
+      method: 'POST',
+      body: JSON.stringify({
+        xp_earned: data.xp_earned,
+        bonus_xp: data.bonus_xp || 0,
+        source: data.source,
+        details: data.details || '',
+      }),
+    });
+  }
+
+  // ============================================
   // Skills Endpoints
   // ============================================
 
