@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ACHIEVEMENTS, XP_REWARDS, calculateLevel, Achievement } from '../data/achievements';
+import { apiClient } from '../lib/api-client';
 
 // Types
 export interface UnlockedAchievement {
@@ -258,6 +259,7 @@ interface GamificationContextType {
   updatePronunciationScore: (score: number) => void;
   completeRolePlay: (scenarioId: string) => void;
   addPerfectAnswer: () => void;
+  refreshFromBackend: () => Promise<void>; // Sync with backend data
 }
 
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
@@ -273,17 +275,31 @@ interface GamificationProviderProps {
 
 export const GamificationProvider: React.FC<GamificationProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(gamificationReducer, initialState);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load data from AsyncStorage on mount
   useEffect(() => {
     loadData();
   }, []);
 
-  // Save data to AsyncStorage whenever state changes
+  // Debounced save to AsyncStorage (500ms delay to batch rapid changes)
   useEffect(() => {
     if (!state.isLoading) {
-      saveData();
+      // Clear any pending save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      // Schedule a new save
+      saveTimeoutRef.current = setTimeout(() => {
+        saveData();
+      }, 500);
     }
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [state]);
 
   // Check streak on mount and daily
@@ -442,6 +458,39 @@ export const GamificationProvider: React.FC<GamificationProviderProps> = ({ chil
     }
   };
 
+  // Refresh gamification state from backend (call after practice sessions)
+  // Uses getTodayGoal as a non-mutating endpoint to verify connection
+  // Streak data is synced when recordActivity is called in PracticeContext
+  const refreshFromBackend = async () => {
+    try {
+      // Fetch goal data from backend to verify we're in sync
+      const goalData = await apiClient.getTodayGoal().catch(() => null);
+
+      // If we got data, the connection is working
+      // Streak is already synced via PracticeContext.completeSession -> recordActivity
+      // The actual streak values will update next time checkStreakStatus runs
+
+      if (goalData) {
+        // Update today's practice minutes from backend if available
+        const backendMinutes = goalData.actual_study_minutes || 0;
+        if (backendMinutes > state.streak.todayPracticeMinutes) {
+          dispatch({
+            type: 'SET_STATE',
+            payload: {
+              streak: {
+                ...state.streak,
+                todayPracticeMinutes: backendMinutes,
+              },
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.log('Failed to refresh from backend:', error);
+      // Silently fail - local state is still valid
+    }
+  };
+
   const checkAndUnlockAchievements = useCallback(() => {
     ACHIEVEMENTS.forEach(achievement => {
       // Skip if already unlocked
@@ -566,6 +615,7 @@ export const GamificationProvider: React.FC<GamificationProviderProps> = ({ chil
     updatePronunciationScore,
     completeRolePlay,
     addPerfectAnswer,
+    refreshFromBackend,
   };
 
   return (

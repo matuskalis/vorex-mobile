@@ -322,35 +322,41 @@ export function PracticeProvider({ children }: { children: ReactNode }) {
     // Complete locally first
     dispatch({ type: 'COMPLETE_SESSION' });
 
-    // Sync to backend (fire and forget - don't block UI)
-    try {
-      // 1. Record activity to update streak
-      apiClient.recordActivity().catch(err => {
-        console.log('Failed to record activity:', err);
-      });
+    // Calculate XP and study time
+    const baseXP = phrasesCompleted * 10;
+    const bonusXP = goodAttempts * 5; // 5 bonus XP per "good" rating
+    const studyMinutes = Math.max(1, Math.round(phrasesCompleted * 0.5));
 
-      // 2. Award XP (10 XP per phrase, bonus for good ratings)
-      const baseXP = phrasesCompleted * 10;
-      const bonusXP = goodAttempts * 5; // 5 bonus XP per "good" rating
+    // Sync to backend using Promise.allSettled for better error handling
+    const results = await Promise.allSettled([
+      // 1. Record activity to update streak
+      apiClient.recordActivity(),
+      // 2. Award XP
       apiClient.recordXP({
         xp_earned: baseXP,
         bonus_xp: bonusXP,
         source: 'practice_session',
         details: `Completed ${phrasesCompleted} phrases`,
-      }).catch(err => {
-        console.log('Failed to record XP:', err);
-      });
-
-      // 3. Update daily goal progress (estimate ~1 min per phrase)
-      const studyMinutes = Math.max(1, Math.round(phrasesCompleted * 0.5));
+      }),
+      // 3. Update daily goal progress
       apiClient.updateGoalProgress({
         study_minutes: studyMinutes,
         drills: phrasesCompleted,
-      }).catch(err => {
-        console.log('Failed to update goal progress:', err);
-      });
-    } catch (err) {
-      console.log('Error syncing session:', err);
+      }),
+    ]);
+
+    // Log any failures for debugging
+    const apiNames = ['recordActivity', 'recordXP', 'updateGoalProgress'];
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`Failed to ${apiNames[index]}:`, result.reason);
+      }
+    });
+
+    // Count successes for potential future retry queue
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.log(`Session sync: ${results.length - failures.length}/${results.length} API calls succeeded`);
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,24 @@ export function SwipeablePhraseCard({ phrase, onSelfAssess, onComplete }: Swipea
   const [ttsSound, setTtsSound] = useState<Audio.Sound | null>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Cleanup audio resources on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Cleanup TTS sound
+      if (ttsSound) {
+        ttsSound.unloadAsync().catch(() => {});
+      }
+      // Cleanup recording playback sound
+      if (sound) {
+        sound.unloadAsync().catch(() => {});
+      }
+      // Stop and cleanup any active recording
+      if (recording) {
+        recording.stopAndUnloadAsync().catch(() => {});
+      }
+    };
+  }, [ttsSound, sound, recording]);
 
   // Start pulse animation for recording
   const startPulse = () => {
@@ -185,6 +203,7 @@ export function SwipeablePhraseCard({ phrase, onSelfAssess, onComplete }: Swipea
       // Reset for another try
       setCardState('initial');
       setRecordingUri(null);
+      setMarkedWords([]); // Clear marked words on retry
     }
   };
 

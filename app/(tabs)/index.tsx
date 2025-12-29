@@ -1,12 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Animated, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useFocusEffect } from 'expo-router';
 import { useLearning } from '../../src/context/LearningContext';
 import { useGamification } from '../../src/context/GamificationContext';
 import { usePractice } from '../../src/context/PracticeContext';
 import { ProblemWordsSummary } from '../../src/components/ProblemWordsSummary';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
-import { Target, Play, Clock, ChevronRight, Flame, Sparkles, Trophy, Mic2 } from 'lucide-react-native';
+import { Target, Play, Clock, ChevronRight, Flame, Sparkles, Trophy, Mic2, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { colors, spacing, layout, textStyles, shadows, darkTheme } from '../../src/theme';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { apiClient } from '../../src/lib/api-client';
@@ -291,30 +291,56 @@ function StreakFlame({ streak, size = 24 }: { streak: number; size?: number }) {
 
 export default function HomeScreen() {
   const { state } = useLearning();
-  const { state: gamificationState } = useGamification();
+  const { state: gamificationState, refreshFromBackend } = useGamification();
   const { getTopProblemWords } = usePractice();
   const router = useRouter();
 
   // Backend-synced daily progress
   const [todayMinutes, setTodayMinutes] = useState(0);
   const [goalMinutes, setGoalMinutes] = useState(state.dailyGoalMinutes || 15);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch today's goal from backend
-  const fetchTodayGoal = useCallback(async () => {
+  const fetchTodayGoal = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) {
+      setIsRefreshing(true);
+    }
+    setError(null);
+
     try {
       const goal = await apiClient.getTodayGoal();
       setTodayMinutes(goal.actual_study_minutes || 0);
       setGoalMinutes(goal.target_study_minutes || 15);
     } catch (err) {
+      setError("Couldn't load today's progress");
       // Fall back to local state
       setTodayMinutes(state.todayStats.speakingMinutes);
       setGoalMinutes(state.dailyGoalMinutes || 15);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [state.todayStats.speakingMinutes, state.dailyGoalMinutes]);
 
   useEffect(() => {
     fetchTodayGoal();
   }, [fetchTodayGoal]);
+
+  // Refresh data when screen gains focus (e.g., returning from practice)
+  useFocusEffect(
+    useCallback(() => {
+      fetchTodayGoal();
+      refreshFromBackend(); // Sync gamification state with backend
+    }, [fetchTodayGoal, refreshFromBackend])
+  );
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(() => {
+    fetchTodayGoal(true);
+    refreshFromBackend();
+  }, [fetchTodayGoal, refreshFromBackend]);
 
   // Get problem words for display
   const problemWords = getTopProblemWords(5);
@@ -372,7 +398,24 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary[400]}
+            colors={[colors.primary[400]]}
+          />
+        }
       >
+        {/* Error Banner */}
+        {error && (
+          <Pressable style={styles.errorBanner} onPress={onRefresh}>
+            <AlertCircle size={16} color={colors.error[400]} strokeWidth={2} />
+            <Text style={styles.errorText}>{error}</Text>
+            <RefreshCw size={14} color={colors.error[400]} strokeWidth={2} />
+          </Pressable>
+        )}
+
         {/* Unified Hero Section */}
         <View style={styles.unifiedHero}>
           {/* Top Row - Date & CEFR Level */}
@@ -1147,5 +1190,26 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     height: spacing[4],
+  },
+
+  // Error Banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    marginHorizontal: layout.screenPadding,
+    marginTop: spacing[2],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    backgroundColor: colors.error[500] + '15',
+    borderRadius: layout.radius.lg,
+    borderWidth: 1,
+    borderColor: colors.error[500] + '30',
+  },
+  errorText: {
+    ...textStyles.bodySmall,
+    color: colors.error[400],
+    flex: 1,
   },
 });
